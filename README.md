@@ -68,4 +68,4 @@ Product endpoints:
 - `DELETE /api/products/:id`
 
 ## Author
-Frank4112
+Francis Bosire
