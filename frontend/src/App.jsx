@@ -14,6 +14,7 @@ import SalesHistory from "./pages/SalesHistory";
 import Login from "./pages/Login";
 import Users from "./pages/Users";
 import StockManagement from "./pages/StockManagement";
+import Menu from "./pages/Menu";
 
 function App() {
   const [user, setUser] = useState(() => {
@@ -97,6 +98,10 @@ function App() {
                 element={<SalesHistory currentUser={user} isMySales={true} />}
               />
               <Route path="*" element={<Navigate to="/" replace />} />
+              <Route
+                path="/menu"
+                element={isAdmin ? <Menu /> : <Navigate to="/sales" replace />}
+              />
             </Routes>
           </div>
 

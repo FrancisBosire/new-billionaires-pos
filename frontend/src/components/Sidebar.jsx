@@ -8,6 +8,7 @@ import {
   FaUserCircle,
   FaWarehouse,
   FaHistory,
+  FaUtensils,
 } from "react-icons/fa";
 import logo from "../assets/logo.png";
 
@@ -19,6 +20,7 @@ function Sidebar({ currentUser }) {
     { name: "Products",        path: "/products",     icon: <FaBox /> },
     { name: "Stock",           path: "/stock",        icon: <FaWarehouse /> },
     { name: "User Management", path: "/users",        icon: <FaUserCircle /> },
+    { name: "Menu",            path: "/menu",         icon: <FaUtensils /> },
     { name: "Reports",         path: "/reports",      icon: <FaChartBar /> },
   ];
 
