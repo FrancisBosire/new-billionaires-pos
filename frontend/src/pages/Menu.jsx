@@ -122,7 +122,7 @@ export default function Menu() {
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
             <div>
               <label style={labelStyle}>Food Name *</label>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Beef Burger" style={inputStyle} />
+              <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Pilau" style={inputStyle} />
             </div>
             <div>
               <label style={labelStyle}>Price (KES) *</label>
