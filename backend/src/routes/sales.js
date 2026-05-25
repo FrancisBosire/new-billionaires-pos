@@ -95,102 +95,111 @@ router.get("/:id", async (req, res) => {
 ========================= */
 
 router.post("/", async (req, res) => {
-
   const { items, paymentMethod, userId } = req.body;
 
   if (!Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({
-      message: "Cart items are required",
-    });
+    return res.status(400).json({ message: "Cart items are required" });
   }
 
   if (!validPaymentMethods.includes(paymentMethod)) {
-    return res.status(400).json({
-      message: "Payment method must be cash or mpesa",
-    });
+    return res.status(400).json({ message: "Payment method must be cash or mpesa" });
   }
 
   const connection = await db.getConnection();
 
   try {
-
     await connection.beginTransaction();
 
     let totalAmount = 0;
     const saleItems = [];
 
     for (const item of items) {
-
       const productId = Number(item.productId);
       const quantity = Number(item.quantity);
+      const itemType = item.type || "bar"; // "bar" or "food"
 
       if (!productId || !quantity || quantity < 1) {
-        throw new Error(
-          "Each cart item must include a valid product and quantity"
-        );
+        throw new Error("Each cart item must include a valid product and quantity");
       }
 
-      const [products] = await connection.query(`
-        SELECT id, name, stock_quantity, selling_price
-        FROM products
-        WHERE id = ? AND is_active = 1
-        FOR UPDATE
-      `, [productId]);
-
-      if (products.length === 0) {
-
-        const error = new Error("Product not found");
-        error.statusCode = 404;
-        throw error;
-      }
-
-      const product = products[0];
-
-      if (Number(product.stock_quantity) < quantity) {
-
-        const error = new Error(
-          `Not enough stock for ${product.name}. Available stock: ${product.stock_quantity}`
+      if (itemType === "food") {
+        // Look up in menu_items — no stock to check
+        const [menuItems] = await connection.query(
+          "SELECT id, name, price FROM menu_items WHERE id = ?",
+          [productId]
         );
 
-        error.statusCode = 400;
-        throw error;
+        if (menuItems.length === 0) {
+          const error = new Error("Menu item not found");
+          error.statusCode = 404;
+          throw error;
+        }
+
+        const menuItem = menuItems[0];
+        const price = Number(menuItem.price);
+        totalAmount += price * quantity;
+
+        saleItems.push({ productId, quantity, price, type: "food" });
+
+      } else {
+        // Look up in products — check stock
+        const [products] = await connection.query(`
+          SELECT id, name, stock_quantity, selling_price
+          FROM products
+          WHERE id = ? AND is_active = 1
+          FOR UPDATE
+        `, [productId]);
+
+        if (products.length === 0) {
+          const error = new Error("Product not found");
+          error.statusCode = 404;
+          throw error;
+        }
+
+        const product = products[0];
+
+        if (Number(product.stock_quantity) < quantity) {
+          const error = new Error(
+            `Not enough stock for ${product.name}. Available: ${product.stock_quantity}`
+          );
+          error.statusCode = 400;
+          throw error;
+        }
+
+        const price = Number(product.selling_price);
+        totalAmount += price * quantity;
+        saleItems.push({ productId, quantity, price, type: "bar" });
       }
-
-      const price = Number(product.selling_price);
-
-      totalAmount += price * quantity;
-
-      saleItems.push({
-        productId,
-        quantity,
-        price,
-      });
     }
 
-    const [saleResult] = await connection.query(`
-      INSERT INTO sales (total_amount, payment_method, user_id)
-      VALUES (?, ?, ?)
-    `, [totalAmount, paymentMethod, userId || null]);
+    // Insert sale
+    const [saleResult] = await connection.query(
+      "INSERT INTO sales (total_amount, payment_method, user_id) VALUES (?, ?, ?)",
+      [totalAmount, paymentMethod, userId || null]
+    );
 
     const saleId = saleResult.insertId;
 
     for (const item of saleItems) {
+      // Insert sale item — use product_id for bar, menu_item_id for food
+      // We store both in product_id column but only deduct stock for bar items
+      await connection.query(
+        "INSERT INTO sale_items (sale_id, product_id, quantity, price) VALUES (?, ?, ?, ?)",
+        [saleId, item.productId, item.quantity, item.price]
+      );
 
-      await connection.query(`
-        INSERT INTO sale_items (sale_id, product_id, quantity, price)
-        VALUES (?, ?, ?, ?)
-      `, [saleId, item.productId, item.quantity, item.price]);
+      if (item.type === "bar") {
+        // Deduct stock only for bar products
+        await connection.query(
+          "UPDATE products SET stock_quantity = stock_quantity - ? WHERE id = ?",
+          [item.quantity, item.productId]
+        );
 
-      await connection.query(`
-        UPDATE products
-        SET stock_quantity = stock_quantity - ?
-        WHERE id = ?
-      `, [item.quantity, item.productId]);
-
-      await connection.query(`
-        INSERT INTO stock_movements (product_id, type, quantity, reference_id)
-        VALUES (?, 'OUT', ?, ?)
-      `, [item.productId, item.quantity, saleId]);
+        await connection.query(
+          "INSERT INTO stock_movements (product_id, type, quantity, reference_id) VALUES (?, 'OUT', ?, ?)",
+          [item.productId, item.quantity, saleId]
+        );
+      }
     }
 
     await connection.commit();
@@ -203,19 +212,12 @@ router.post("/", async (req, res) => {
     });
 
   } catch (error) {
-
     await connection.rollback();
-
     console.error("Failed to complete sale:", error);
-
     return res.status(error.statusCode || 500).json({
-      message: error.statusCode
-        ? error.message
-        : "Failed to complete sale",
+      message: error.statusCode ? error.message : "Failed to complete sale",
     });
-
   } finally {
-
     connection.release();
   }
 });

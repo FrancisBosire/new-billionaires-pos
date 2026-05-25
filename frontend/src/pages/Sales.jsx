@@ -173,6 +173,7 @@ function Sales({ currentUser }) {
           items: cartItems.map((item) => ({
             productId: item.productId,
             quantity: item.quantity,
+            type: item.type,
           })),
         }),
       });
