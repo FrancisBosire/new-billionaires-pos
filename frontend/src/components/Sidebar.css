@@ -14,6 +14,41 @@
   -ms-overflow-style: none;
 }
 
+.app-shell[data-theme="dark"] .sidebar {
+  background:
+    radial-gradient(circle at 50% 8%, rgba(214, 108, 255, 0.2), transparent 30%),
+    linear-gradient(180deg, #080414 0%, #12072b 100%);
+  border-right-color: rgba(168, 85, 247, 0.32);
+}
+
+.app-shell[data-theme="dark"] .sidebar-brand h2 {
+  color: #ff6ee7;
+}
+
+.app-shell[data-theme="dark"] .sidebar-brand p,
+.app-shell[data-theme="dark"] .sidebar-item {
+  color: #f8f7ff;
+}
+
+.app-shell[data-theme="dark"] .sidebar-item:hover {
+  background: rgba(168, 85, 247, 0.2);
+}
+
+.app-shell[data-theme="dark"] .sidebar-item.active {
+  background: linear-gradient(135deg, #7c2dff 0%, #d66cff 100%);
+  color: #ffffff;
+  box-shadow: 0 10px 24px rgba(124, 45, 255, 0.34);
+}
+
+.app-shell[data-theme="dark"] .sidebar-user {
+  background: rgba(18, 10, 42, 0.88);
+  border-color: rgba(168, 85, 247, 0.28);
+}
+
+.app-shell[data-theme="dark"] .sidebar-user-icon {
+  color: #ff6ee7;
+}
+
 .sidebar::-webkit-scrollbar {
   display: none;
 }

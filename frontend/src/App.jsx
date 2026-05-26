@@ -21,6 +21,15 @@ function App() {
     const saved = sessionStorage.getItem("user");
     return saved ? JSON.parse(saved) : null;
   });
+  const [theme, setTheme] = useState(() => localStorage.getItem("theme") || "light");
+
+  const toggleTheme = () => {
+    setTheme((currentTheme) => {
+      const nextTheme = currentTheme === "dark" ? "light" : "dark";
+      localStorage.setItem("theme", nextTheme);
+      return nextTheme;
+    });
+  };
 
   const handleLogin = (loggedInUser, token) => {
     sessionStorage.setItem("token", token);
@@ -47,6 +56,7 @@ function App() {
       {/* Full viewport, nothing overflows at root level */}
       <div
         className="app-shell"
+        data-theme={theme}
         style={{ display: "flex", height: "100vh", overflow: "hidden" }}
       >
 
@@ -56,11 +66,11 @@ function App() {
         {/* Right side — column layout, fills remaining space */}
         <div
           className="app-main"
-          style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "#f7f7f4" }}
+          style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: theme === "dark" ? "#09051c" : "#f7f7f4" }}
         >
 
           {/* Header — always visible at top */}
-          <Header currentUser={user} onLogout={handleLogout} />
+          <Header currentUser={user} onLogout={handleLogout} theme={theme} onToggleTheme={toggleTheme} />
 
           {/* Content — only this area scrolls */}
           <div

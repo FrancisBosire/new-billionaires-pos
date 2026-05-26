@@ -1,23 +1,27 @@
-function Header({ currentUser, onLogout }) {
+import { FaMoon, FaSun } from "react-icons/fa";
+
+function Header({ currentUser, onLogout, theme, onToggleTheme }) {
+  const isDark = theme === "dark";
+
   return (
     <div
       className="app-header"
       style={{
         height: "72px",
-        background: "white",
+        background: isDark ? "#0d0824" : "white",
         display: "flex",
         justifyContent: "space-between",
         alignItems: "center",
         padding: "0 28px",
-        borderBottom: "1px solid #e5e7eb",
+        borderBottom: isDark ? "1px solid rgba(168, 85, 247, 0.22)" : "1px solid #e5e7eb",
       }}
     >
       {/* LEFT — Welcome */}
       <div className="app-header-copy">
-        <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "700", color: "#1a1a2e" }}>
+        <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "700", color: isDark ? "#f8f7ff" : "#1a1a2e" }}>
           Welcome back, {currentUser.name}
         </h3>
-        <p style={{ color: "#6b7280", fontSize: "14px", marginTop: "4px" }}>
+        <p style={{ color: isDark ? "#a8a3c7" : "#6b7280", fontSize: "14px", marginTop: "4px" }}>
           New Billionaires Bar & Restaurant
         </p>
       </div>
@@ -26,12 +30,32 @@ function Header({ currentUser, onLogout }) {
       <div className="app-header-actions" style={{ display: "flex", alignItems: "center", gap: "16px" }}>
 
         <button
+          onClick={onToggleTheme}
+          title={isDark ? "Switch to light theme" : "Switch to dark purple theme"}
+          aria-label={isDark ? "Switch to light theme" : "Switch to dark purple theme"}
+          style={{
+            width: "42px",
+            height: "34px",
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: isDark ? "#25104a" : "#eef1f5",
+            color: isDark ? "#d66cff" : "#1a1a2e",
+            border: isDark ? "1px solid #7c2dff" : "1px solid #d0cdc6",
+            borderRadius: "8px",
+            cursor: "pointer",
+          }}
+        >
+          {isDark ? <FaSun /> : <FaMoon />}
+        </button>
+
+        <button
           onClick={onLogout}
           style={{
   padding: "8px 16px",
-  background: "#1a1a2e",
-  color: "#c9a84c",
-  border: "none",
+  background: isDark ? "#170a33" : "#1a1a2e",
+  color: isDark ? "#ff6ee7" : "#c9a84c",
+  border: isDark ? "1px solid #7c2dff" : "none",
   borderRadius: "8px",
   cursor: "pointer",
   fontWeight: "600",
@@ -43,10 +67,10 @@ function Header({ currentUser, onLogout }) {
         </button>
 
         <div className="app-header-brand" style={brandStyle}>
-          <div style={brandLogoStyle}>NB</div>
+          <div style={{ ...brandLogoStyle, background: isDark ? "#14062d" : "#111827", borderColor: isDark ? "#7c2dff" : "#111827", color: isDark ? "#ff6ee7" : "#ffffff" }}>NB</div>
           <div>
-            <strong style={brandNameStyle}>NEW BILLIONAIRES</strong>
-            <p style={brandSubtitleStyle}>BAR & RESTAURANT</p>
+            <strong style={{ ...brandNameStyle, color: isDark ? "#f8f7ff" : "#111827" }}>NEW BILLIONAIRES</strong>
+            <p style={{ ...brandSubtitleStyle, color: isDark ? "#a8a3c7" : "#111827" }}>BAR & RESTAURANT</p>
           </div>
         </div>
 
