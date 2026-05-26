@@ -46,7 +46,7 @@ router.get("/", async (req, res) => {
       FROM sale_items
       JOIN products ON sale_items.product_id = products.id
       JOIN sales ON sale_items.sale_id = sales.id
-      WHERE sale_items.item_type = 'bar'
+      WHERE COALESCE(sale_items.item_type, 'bar') = 'bar'
       AND DATE(sales.created_at) BETWEEN ? AND ?
       GROUP BY products.id, products.name, products.category, products.cost_price
       ORDER BY totalQuantity DESC
@@ -64,7 +64,7 @@ router.get("/", async (req, res) => {
       FROM sale_items
       JOIN products ON sale_items.product_id = products.id
       JOIN sales ON sale_items.sale_id = sales.id
-      WHERE sale_items.item_type = 'bar'
+      WHERE COALESCE(sale_items.item_type, 'bar') = 'bar'
       AND DATE(sales.created_at) BETWEEN ? AND ?
       GROUP BY products.id, products.name, products.category, products.cost_price
       ORDER BY totalRevenue DESC
@@ -79,7 +79,7 @@ router.get("/", async (req, res) => {
         SUM(sale_items.quantity) AS totalQuantity,
         SUM(sale_items.quantity * sale_items.price) AS totalRevenue
       FROM sale_items
-      JOIN menu_items ON sale_items.menu_item_id = menu_items.id
+      JOIN menu_items ON COALESCE(sale_items.menu_item_id, sale_items.product_id) = menu_items.id
       JOIN sales ON sale_items.sale_id = sales.id
       WHERE sale_items.item_type = 'food'
       AND DATE(sales.created_at) BETWEEN ? AND ?
@@ -96,7 +96,7 @@ router.get("/", async (req, res) => {
         SUM(sale_items.quantity) AS totalQuantity,
         SUM(sale_items.quantity * sale_items.price) AS totalRevenue
       FROM sale_items
-      JOIN menu_items ON sale_items.menu_item_id = menu_items.id
+      JOIN menu_items ON COALESCE(sale_items.menu_item_id, sale_items.product_id) = menu_items.id
       JOIN sales ON sale_items.sale_id = sales.id
       WHERE sale_items.item_type = 'food'
       AND DATE(sales.created_at) BETWEEN ? AND ?
@@ -108,7 +108,7 @@ router.get("/", async (req, res) => {
     // 7. BAR VS FOOD PERFORMANCE
     const [itemTypeBreakdown] = await db.query(`
       SELECT
-        CASE sale_items.item_type
+        CASE COALESCE(sale_items.item_type, 'bar')
           WHEN 'food' THEN 'Food'
           ELSE 'Bar'
         END AS type,
@@ -118,7 +118,7 @@ router.get("/", async (req, res) => {
       FROM sale_items
       JOIN sales ON sale_items.sale_id = sales.id
       WHERE DATE(sales.created_at) BETWEEN ? AND ?
-      GROUP BY sale_items.item_type
+      GROUP BY CASE COALESCE(sale_items.item_type, 'bar') WHEN 'food' THEN 'Food' ELSE 'Bar' END
       ORDER BY totalRevenue DESC
     `, [start, end]);
 
@@ -131,7 +131,7 @@ router.get("/", async (req, res) => {
       FROM sale_items
       JOIN products ON sale_items.product_id = products.id
       JOIN sales ON sale_items.sale_id = sales.id
-      WHERE sale_items.item_type = 'bar'
+      WHERE COALESCE(sale_items.item_type, 'bar') = 'bar'
       AND DATE(sales.created_at) BETWEEN ? AND ?
     `, [start, end]);
 

@@ -105,7 +105,38 @@ function StatCard({ label, value, sub, accent }) {
 }
 
 
-const TABS = ["Overview", "Sales Trends", "Products", "Cashiers", "Stock"];
+const TABS = ["Overview", "Sales Trends", "Products", "Food", "Cashiers", "Stock"];
+
+const sumMetric = (items, key) =>
+  items.reduce((sum, item) => sum + Number(item[key] || 0), 0);
+
+const getItemTypeBreakdown = (data) => {
+  if ((data.itemTypeBreakdown || []).length > 0) {
+    return data.itemTypeBreakdown;
+  }
+
+  const barItems = data.topByRevenue?.length ? data.topByRevenue : data.topByQuantity || [];
+  const foodItems = data.foodByRevenue?.length ? data.foodByRevenue : data.foodByQuantity || [];
+  const fallback = [];
+
+  if (barItems.length > 0) {
+    fallback.push({
+      type: "Bar",
+      totalQuantity: sumMetric(barItems, "totalQuantity"),
+      totalRevenue: sumMetric(barItems, "totalRevenue"),
+    });
+  }
+
+  if (foodItems.length > 0) {
+    fallback.push({
+      type: "Food",
+      totalQuantity: sumMetric(foodItems, "totalQuantity"),
+      totalRevenue: sumMetric(foodItems, "totalRevenue"),
+    });
+  }
+
+  return fallback;
+};
 
 const getQuickRange = (key) => {
   const now = new Date();
@@ -334,7 +365,10 @@ export default function Reports() {
           )}
 
           {/* ── PRODUCTS TAB ── */}
-          {activeTab === "Products" && (
+          {activeTab === "Products" && (() => {
+            const comparisonData = getItemTypeBreakdown(data);
+
+            return (
             <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
               <div style={{ display: "flex", gap: "8px" }}>
                 {["quantity", "revenue"].map((v) => (
@@ -351,16 +385,16 @@ export default function Reports() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
                 <div style={{ background: "#fff", border: "1px solid #e0ddd5", borderRadius: "10px", padding: "24px" }}>
                   <h3 style={{ margin: "0 0 20px", fontSize: "16px", fontWeight: "700" }}>Bar vs Food Revenue</h3>
-                  {(data.itemTypeBreakdown || []).length === 0
+                  {comparisonData.length === 0
                     ? <p style={{ color: "#888" }}>No sales data for this period</p>
-                    : <BarChart data={data.itemTypeBreakdown} labelKey="type" valueKey="totalRevenue" color="#1a1a2e" formatValue={formatMoney} />
+                    : <BarChart data={comparisonData} labelKey="type" valueKey="totalRevenue" color="#1a1a2e" formatValue={formatMoney} />
                   }
                 </div>
                 <div style={{ background: "#fff", border: "1px solid #e0ddd5", borderRadius: "10px", padding: "24px" }}>
                   <h3 style={{ margin: "0 0 20px", fontSize: "16px", fontWeight: "700" }}>Bar vs Food Units Sold</h3>
-                  {(data.itemTypeBreakdown || []).length === 0
+                  {comparisonData.length === 0
                     ? <p style={{ color: "#888" }}>No sales data for this period</p>
-                    : <BarChart data={data.itemTypeBreakdown} labelKey="type" valueKey="totalQuantity" color="#c9a84c" formatValue={formatNum} />
+                    : <BarChart data={comparisonData} labelKey="type" valueKey="totalQuantity" color="#c9a84c" formatValue={formatNum} />
                   }
                 </div>
               </div>
@@ -376,22 +410,6 @@ export default function Reports() {
                       labelKey="name"
                       valueKey={productView === "quantity" ? "totalQuantity" : "totalRevenue"}
                       color="#c9a84c"
-                      formatValue={productView === "quantity" ? formatNum : formatMoney}
-                    />
-                }
-              </div>
-
-              <div style={{ background: "#fff", border: "1px solid #e0ddd5", borderRadius: "10px", padding: "24px" }}>
-                <h3 style={{ margin: "0 0 20px", fontSize: "16px", fontWeight: "700" }}>
-                  Top Food Items by {productView === "quantity" ? "Units Sold" : "Revenue"}
-                </h3>
-                {(productView === "quantity" ? data.foodByQuantity || [] : data.foodByRevenue || []).length === 0
-                  ? <p style={{ color: "#888" }}>No food sales data for this period</p>
-                  : <BarChart
-                      data={productView === "quantity" ? data.foodByQuantity : data.foodByRevenue}
-                      labelKey="name"
-                      valueKey={productView === "quantity" ? "totalQuantity" : "totalRevenue"}
-                      color="#2e7d32"
                       formatValue={productView === "quantity" ? formatNum : formatMoney}
                     />
                 }
@@ -451,6 +469,41 @@ export default function Reports() {
                 </table>
               </div>
 
+            </div>
+            );
+          })()}
+
+          {/* ── FOOD TAB ── */}
+          {activeTab === "Food" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+              <div style={{ display: "flex", gap: "8px" }}>
+                {["quantity", "revenue"].map((v) => (
+                  <button key={v} onClick={() => setProductView(v)} style={{
+                    padding: "8px 16px", borderRadius: "8px",
+                    border: productView === v ? "1px solid #c9a84c" : "1px solid #d0cdc6",
+                    background: productView === v ? "#1a1a2e" : "#fff",
+                    color: productView === v ? "#c9a84c" : "#4a4a4a",
+                    cursor: "pointer", fontWeight: "600", fontSize: "13px", textTransform: "capitalize",
+                  }}>By {v}</button>
+                ))}
+              </div>
+
+              <div style={{ background: "#fff", border: "1px solid #e0ddd5", borderRadius: "10px", padding: "24px" }}>
+                <h3 style={{ margin: "0 0 20px", fontSize: "16px", fontWeight: "700" }}>
+                  Top Foods by {productView === "quantity" ? "Units Sold" : "Revenue"}
+                </h3>
+                {(productView === "quantity" ? data.foodByQuantity || [] : data.foodByRevenue || []).length === 0
+                  ? <p style={{ color: "#888" }}>No food sales data for this period</p>
+                  : <BarChart
+                      data={productView === "quantity" ? data.foodByQuantity : data.foodByRevenue}
+                      labelKey="name"
+                      valueKey={productView === "quantity" ? "totalQuantity" : "totalRevenue"}
+                      color="#2e7d32"
+                      formatValue={productView === "quantity" ? formatNum : formatMoney}
+                    />
+                }
+              </div>
+
               <div style={{ background: "#fff", border: "1px solid #e0ddd5", borderRadius: "10px", overflow: "hidden" }}>
                 <div style={{ padding: "16px 20px", borderBottom: "2px solid #e0ddd5", background: "#f5f3ee" }}>
                   <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "700" }}>Food Performance</h3>
@@ -459,28 +512,30 @@ export default function Reports() {
                   <thead>
                     <tr>
                       <th style={thStyle}>#</th>
-                      <th style={thStyle}>Food Item</th>
-                      <th style={thStyle}>Category</th>
+                      <th style={thStyle}>Food</th>
                       <th style={thStyle}>Qty Sold</th>
                       <th style={thStyle}>Revenue</th>
+                      <th style={thStyle}>Avg Price</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(productView === "quantity" ? data.foodByQuantity || [] : data.foodByRevenue || []).length === 0 ? (
                       <tr><td colSpan={5} style={{ ...tdStyle, textAlign: "center", color: "#888" }}>No food sales data</td></tr>
-                    ) : (productView === "quantity" ? data.foodByQuantity : data.foodByRevenue).map((item, i) => (
-                      <tr key={i} {...hoverRow}>
-                        <td style={{ ...tdStyle, color: "#2e7d32", fontWeight: "700" }}>{i + 1}</td>
-                        <td style={{ ...tdStyle, fontWeight: "600" }}>{item.name}</td>
-                        <td style={tdStyle}>
-                          <span style={{ background: "#e8f5e9", color: "#2e7d32", padding: "2px 8px", borderRadius: "20px", fontSize: "12px" }}>
-                            Food
-                          </span>
-                        </td>
-                        <td style={tdStyle}>{formatNum(item.totalQuantity)}</td>
-                        <td style={{ ...tdStyle, fontWeight: "600" }}>{formatMoney(item.totalRevenue)}</td>
-                      </tr>
-                    ))}
+                    ) : (productView === "quantity" ? data.foodByQuantity : data.foodByRevenue).map((item, i) => {
+                      const quantity = Number(item.totalQuantity || 0);
+                      const revenue = Number(item.totalRevenue || 0);
+                      const avgPrice = quantity > 0 ? revenue / quantity : 0;
+
+                      return (
+                        <tr key={i} {...hoverRow}>
+                          <td style={{ ...tdStyle, color: "#2e7d32", fontWeight: "700" }}>{i + 1}</td>
+                          <td style={{ ...tdStyle, fontWeight: "600" }}>{item.name}</td>
+                          <td style={tdStyle}>{formatNum(item.totalQuantity)}</td>
+                          <td style={{ ...tdStyle, fontWeight: "600" }}>{formatMoney(item.totalRevenue)}</td>
+                          <td style={tdStyle}>{formatMoney(avgPrice)}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
