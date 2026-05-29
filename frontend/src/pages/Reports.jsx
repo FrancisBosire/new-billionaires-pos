@@ -401,7 +401,7 @@ export default function Reports() {
 
               <div style={{ background: "#fff", border: "1px solid #e0ddd5", borderRadius: "10px", padding: "24px" }}>
                 <h3 style={{ margin: "0 0 20px", fontSize: "16px", fontWeight: "700" }}>
-                  Top Products by {productView === "quantity" ? "Units Sold" : "Revenue"}
+                  Top Drinks by {productView === "quantity" ? "Units Sold" : "Revenue"}
                 </h3>
                 {(productView === "quantity" ? data.topByQuantity : data.topByRevenue).length === 0
                   ? <p style={{ color: "#888" }}>No sales data for this period</p>
@@ -498,7 +498,7 @@ export default function Reports() {
                       data={productView === "quantity" ? data.foodByQuantity : data.foodByRevenue}
                       labelKey="name"
                       valueKey={productView === "quantity" ? "totalQuantity" : "totalRevenue"}
-                      color="#2e7d32"
+                      color="#c9a84c"
                       formatValue={productView === "quantity" ? formatNum : formatMoney}
                     />
                 }
@@ -528,7 +528,7 @@ export default function Reports() {
 
                       return (
                         <tr key={i} {...hoverRow}>
-                          <td style={{ ...tdStyle, color: "#2e7d32", fontWeight: "700" }}>{i + 1}</td>
+                          <td style={{ ...tdStyle, color: "#c9a84c", fontWeight: "700" }}>{i + 1}</td>
                           <td style={{ ...tdStyle, fontWeight: "600" }}>{item.name}</td>
                           <td style={tdStyle}>{formatNum(item.totalQuantity)}</td>
                           <td style={{ ...tdStyle, fontWeight: "600" }}>{formatMoney(item.totalRevenue)}</td>
