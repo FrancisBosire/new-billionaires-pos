@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { FaPlus, FaSearch, FaEdit, FaTrash, FaWarehouse } from "react-icons/fa";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
-const ING_URL = `${API_BASE_URL}/ingredients`;
+const ING_URL = `${API_BASE_URL}/ingredient-stock/ingredients`;
 
 const getAuthHeaders = () => ({
   "Content-Type": "application/json",
@@ -154,7 +154,7 @@ export default function IngredientStock() {
   const fetchHistory = async () => {
     setHistoryLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/ingredients/history?from=${from}&to=${to}`, { headers: getAuthHeaders() });
+      const res = await fetch(`${API_BASE_URL}/ingredient-stock/history?from=${from}&to=${to}`, { headers: getAuthHeaders() });
       const data = await res.json();
       setHistory(Array.isArray(data) ? data : []);
     } catch { setErrorMessage("Failed to load ingredient history."); }
@@ -167,7 +167,7 @@ export default function IngredientStock() {
       try {
         const [ingRes, histRes] = await Promise.all([
           fetch(ING_URL, { headers: getAuthHeaders() }),
-          fetch(`${API_BASE_URL}/ingredients/history?from=${defaultRange.monthStart}&to=${defaultRange.today}`, { headers: getAuthHeaders() }),
+          fetch(`${API_BASE_URL}/ingredient-stock/history?from=${defaultRange.monthStart}&to=${defaultRange.today}`, { headers: getAuthHeaders() }),
         ]);
         const [ingData, histData] = await Promise.all([ingRes.json(), histRes.json()]);
         if (isActive) {
@@ -203,7 +203,7 @@ export default function IngredientStock() {
   const handleStockIn = async () => {
     if (!stockIngredientId || !stockQty) { setErrorMessage("Ingredient and quantity are required."); return; }
     try {
-      const res = await fetch(`${API_BASE_URL}/ingredients/stock-in`, {
+      const res = await fetch(`${API_BASE_URL}/ingredient-stock/stock-in`, {
         method: "POST", headers: getAuthHeaders(),
         body: JSON.stringify({ ingredientId: stockIngredientId, quantity: Number(stockQty), costPerUnit: Number(stockCostPerUnit || 0), notes: stockNotes || undefined }),
       });
