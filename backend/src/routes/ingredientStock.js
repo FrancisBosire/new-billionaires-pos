@@ -11,7 +11,7 @@ router.get("/ingredients", async (req, res) => {
   try {
     const [ingredients] = await db.query(`
       SELECT *
-      FROM ingredients
+      FROM food_ingredients
       WHERE is_active = 1
       ORDER BY name ASC
     `);
@@ -56,8 +56,8 @@ router.get("/history", async (req, res) => {
         im.total_cost,
         im.notes,
         im.created_at
-      FROM ingredient_movements im
-      JOIN ingredients i
+      FROM food_stock_movements im
+      JOIN food_ingredients i
         ON im.ingredient_id = i.id
       WHERE DATE(im.created_at)
         BETWEEN ? AND ?
@@ -93,7 +93,7 @@ router.post("/ingredients", async (req, res) => {
 
   try {
     const [existing] = await db.query(
-      "SELECT id FROM ingredients WHERE name = ?",
+      "SELECT id FROM food_ingredients WHERE name = ?",
       [name]
     );
 
@@ -105,7 +105,7 @@ router.post("/ingredients", async (req, res) => {
 
     const [result] = await db.query(
       `
-      INSERT INTO ingredients
+      INSERT INTO food_ingredients
       (
         name,
         default_unit,
@@ -158,11 +158,7 @@ router.post("/stock-in", async (req, res) => {
     await connection.beginTransaction();
 
     const [[ingredient]] = await connection.query(
-      `
-      SELECT *
-      FROM ingredients
-      WHERE id = ?
-      `,
+      `SELECT * FROM food_ingredients WHERE id = ?`,
       [ingredientId]
     );
 
@@ -170,35 +166,19 @@ router.post("/stock-in", async (req, res) => {
       throw new Error("Ingredient not found.");
     }
 
-    const totalCost =
-      Number(quantity) *
-      Number(costPerUnit || 0);
+    const totalCost = Number(quantity) * Number(costPerUnit || 0);
 
     await connection.query(
-      `
-      UPDATE ingredients
-      SET current_quantity =
-          current_quantity + ?
-      WHERE id = ?
-      `,
+      `UPDATE food_ingredients
+       SET current_quantity = current_quantity + ?
+       WHERE id = ?`,
       [quantity, ingredientId]
     );
 
     await connection.query(
-      `
-      INSERT INTO ingredient_movements
-      (
-        ingredient_id,
-        movement_type,
-        quantity,
-        unit,
-        cost_per_unit,
-        total_cost,
-        notes
-      )
-      VALUES
-      (?, 'IN', ?, ?, ?, ?, ?)
-      `,
+      `INSERT INTO food_stock_movements
+       (ingredient_id, movement_type, quantity, unit, cost_per_unit, total_cost, notes)
+       VALUES (?, 'IN', ?, ?, ?, ?, ?)`,
       [
         ingredientId,
         quantity,
@@ -211,17 +191,11 @@ router.post("/stock-in", async (req, res) => {
 
     await connection.commit();
 
-    res.status(201).json({
-      message: "Stock added successfully.",
-    });
+    res.status(201).json({ message: "Stock added successfully." });
   } catch (err) {
     await connection.rollback();
-
     console.error(err);
-
-    res.status(500).json({
-      error: err.message,
-    });
+    res.status(500).json({ error: err.message });
   } finally {
     connection.release();
   }
@@ -250,11 +224,7 @@ router.post("/stock-out", async (req, res) => {
     await connection.beginTransaction();
 
     const [[ingredient]] = await connection.query(
-      `
-      SELECT *
-      FROM ingredients
-      WHERE id = ?
-      `,
+      `SELECT * FROM food_ingredients WHERE id = ?`,
       [ingredientId]
     );
 
@@ -262,38 +232,21 @@ router.post("/stock-out", async (req, res) => {
       throw new Error("Ingredient not found.");
     }
 
-    if (
-      Number(quantity) >
-      Number(ingredient.current_quantity)
-    ) {
-      throw new Error(
-        "Cannot issue more than available stock."
-      );
+    if (Number(quantity) > Number(ingredient.current_quantity)) {
+      throw new Error("Cannot issue more than available stock.");
     }
 
     await connection.query(
-      `
-      UPDATE ingredients
-      SET current_quantity =
-          current_quantity - ?
-      WHERE id = ?
-      `,
+      `UPDATE food_ingredients
+       SET current_quantity = current_quantity - ?
+       WHERE id = ?`,
       [quantity, ingredientId]
     );
 
     await connection.query(
-      `
-      INSERT INTO ingredient_movements
-      (
-        ingredient_id,
-        movement_type,
-        quantity,
-        unit,
-        notes
-      )
-      VALUES
-      (?, 'OUT', ?, ?, ?)
-      `,
+      `INSERT INTO food_stock_movements
+       (ingredient_id, movement_type, quantity, unit, notes)
+       VALUES (?, 'OUT', ?, ?, ?)`,
       [
         ingredientId,
         quantity,
@@ -304,17 +257,11 @@ router.post("/stock-out", async (req, res) => {
 
     await connection.commit();
 
-    res.json({
-      message: "Stock issued successfully.",
-    });
+    res.json({ message: "Stock issued successfully." });
   } catch (err) {
     await connection.rollback();
-
     console.error(err);
-
-    res.status(500).json({
-      error: err.message,
-    });
+    res.status(500).json({ error: err.message });
   } finally {
     connection.release();
   }
@@ -336,33 +283,16 @@ router.put("/ingredients/:id", async (req, res) => {
 
   try {
     await db.query(
-      `
-      UPDATE ingredients
-      SET
-        name = ?,
-        default_unit = ?,
-        minimum_quantity = ?,
-        notes = ?
-      WHERE id = ?
-      `,
-      [
-        name,
-        defaultUnit,
-        minimumQuantity || 0,
-        notes || null,
-        id,
-      ]
+      `UPDATE food_ingredients
+       SET name = ?, default_unit = ?, minimum_quantity = ?, notes = ?
+       WHERE id = ?`,
+      [name, defaultUnit, minimumQuantity || 0, notes || null, id]
     );
 
-    res.json({
-      message: "Ingredient updated successfully.",
-    });
+    res.json({ message: "Ingredient updated successfully." });
   } catch (err) {
     console.error(err);
-
-    res.status(500).json({
-      error: "Failed to update ingredient.",
-    });
+    res.status(500).json({ error: "Failed to update ingredient." });
   }
 });
 
@@ -373,23 +303,14 @@ router.put("/ingredients/:id", async (req, res) => {
 router.delete("/ingredients/:id", async (req, res) => {
   try {
     await db.query(
-      `
-      UPDATE ingredients
-      SET is_active = 0
-      WHERE id = ?
-      `,
+      `UPDATE food_ingredients SET is_active = 0 WHERE id = ?`,
       [req.params.id]
     );
 
-    res.json({
-      message: "Ingredient deactivated successfully.",
-    });
+    res.json({ message: "Ingredient deactivated successfully." });
   } catch (err) {
     console.error(err);
-
-    res.status(500).json({
-      error: "Failed to deactivate ingredient.",
-    });
+    res.status(500).json({ error: "Failed to deactivate ingredient." });
   }
 });
 
