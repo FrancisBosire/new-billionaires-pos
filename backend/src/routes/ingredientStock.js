@@ -33,16 +33,11 @@ router.get("/history", async (req, res) => {
 
     const start =
       from ||
-      new Date(
-        new Date().getFullYear(),
-        new Date().getMonth(),
-        1
-      )
+      new Date(new Date().getFullYear(), new Date().getMonth(), 1)
         .toISOString()
         .split("T")[0];
 
-    const end =
-      to || new Date().toISOString().split("T")[0];
+    const end = to || new Date().toISOString().split("T")[0];
 
     const [history] = await db.query(
       `
@@ -57,10 +52,8 @@ router.get("/history", async (req, res) => {
         im.notes,
         im.created_at
       FROM food_stock_movements im
-      JOIN food_ingredients i
-        ON im.ingredient_id = i.id
-      WHERE DATE(im.created_at)
-        BETWEEN ? AND ?
+      JOIN food_ingredients i ON im.ingredient_id = i.id
+      WHERE DATE(im.created_at) BETWEEN ? AND ?
       ORDER BY im.created_at DESC
       `,
       [start, end]
@@ -78,17 +71,10 @@ router.get("/history", async (req, res) => {
 // CREATE INGREDIENT
 // =====================================================
 router.post("/ingredients", async (req, res) => {
-  const {
-    name,
-    defaultUnit,
-    minimumQuantity,
-    notes,
-  } = req.body;
+  const { name, defaultUnit, minimumQuantity, notes } = req.body;
 
   if (!name) {
-    return res.status(400).json({
-      error: "Ingredient name is required.",
-    });
+    return res.status(400).json({ error: "Ingredient name is required." });
   }
 
   try {
@@ -98,28 +84,13 @@ router.post("/ingredients", async (req, res) => {
     );
 
     if (existing.length > 0) {
-      return res.status(400).json({
-        error: "Ingredient already exists.",
-      });
+      return res.status(400).json({ error: "Ingredient already exists." });
     }
 
     const [result] = await db.query(
-      `
-      INSERT INTO food_ingredients
-      (
-        name,
-        default_unit,
-        minimum_quantity,
-        notes
-      )
-      VALUES (?, ?, ?, ?)
-      `,
-      [
-        name,
-        defaultUnit || "kg",
-        minimumQuantity || 0,
-        notes || null,
-      ]
+      `INSERT INTO food_ingredients (name, default_unit, minimum_quantity, notes)
+       VALUES (?, ?, ?, ?)`,
+      [name, defaultUnit || "kg", minimumQuantity || 0, notes || null]
     );
 
     res.status(201).json({
@@ -128,9 +99,7 @@ router.post("/ingredients", async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({
-      error: "Failed to create ingredient.",
-    });
+    res.status(500).json({ error: "Failed to create ingredient." });
   }
 });
 
@@ -139,12 +108,7 @@ router.post("/ingredients", async (req, res) => {
 // STOCK IN
 // =====================================================
 router.post("/stock-in", async (req, res) => {
-  const {
-    ingredientId,
-    quantity,
-    costPerUnit,
-    notes,
-  } = req.body;
+  const { ingredientId, quantity, costPerUnit, notes } = req.body;
 
   if (!ingredientId || !quantity) {
     return res.status(400).json({
@@ -166,13 +130,24 @@ router.post("/stock-in", async (req, res) => {
       throw new Error("Ingredient not found.");
     }
 
+    const newQty = Number(ingredient.current_quantity) + Number(quantity);
     const totalCost = Number(quantity) * Number(costPerUnit || 0);
+
+    // ── Recalculate weighted average cost ──────────────────
+    // Only update average_cost if a cost was provided
+    let newAverageCost = ingredient.average_cost;
+    if (Number(costPerUnit) > 0) {
+      const oldTotalValue =
+        Number(ingredient.current_quantity) * Number(ingredient.average_cost || 0);
+      const newTotalValue = oldTotalValue + totalCost;
+      newAverageCost = newTotalValue / newQty;
+    }
 
     await connection.query(
       `UPDATE food_ingredients
-       SET current_quantity = current_quantity + ?
+       SET current_quantity = ?, average_cost = ?
        WHERE id = ?`,
-      [quantity, ingredientId]
+      [newQty, newAverageCost, ingredientId]
     );
 
     await connection.query(
@@ -206,11 +181,7 @@ router.post("/stock-in", async (req, res) => {
 // STOCK OUT
 // =====================================================
 router.post("/stock-out", async (req, res) => {
-  const {
-    ingredientId,
-    quantity,
-    notes,
-  } = req.body;
+  const { ingredientId, quantity, notes } = req.body;
 
   if (!ingredientId || !quantity) {
     return res.status(400).json({
@@ -247,12 +218,7 @@ router.post("/stock-out", async (req, res) => {
       `INSERT INTO food_stock_movements
        (ingredient_id, movement_type, quantity, unit, notes)
        VALUES (?, 'OUT', ?, ?, ?)`,
-      [
-        ingredientId,
-        quantity,
-        ingredient.default_unit,
-        notes || null,
-      ]
+      [ingredientId, quantity, ingredient.default_unit, notes || null]
     );
 
     await connection.commit();
@@ -273,13 +239,7 @@ router.post("/stock-out", async (req, res) => {
 // =====================================================
 router.put("/ingredients/:id", async (req, res) => {
   const { id } = req.params;
-
-  const {
-    name,
-    defaultUnit,
-    minimumQuantity,
-    notes,
-  } = req.body;
+  const { name, defaultUnit, minimumQuantity, notes } = req.body;
 
   try {
     await db.query(

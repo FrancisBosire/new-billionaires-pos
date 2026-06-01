@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState, useRef } from "react";
-import { FaPlus, FaSearch, FaEdit, FaTrash, FaWarehouse } from "react-icons/fa";
+import { FaPlus, FaSearch, FaEdit, FaTrash, FaWarehouse, FaMinusCircle } from "react-icons/fa";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 const ING_URL = `${API_BASE_URL}/ingredient-stock/ingredients`;
+const ING_BASE_URL = `${API_BASE_URL}/ingredient-stock`;
 
 const getAuthHeaders = () => ({
   "Content-Type": "application/json",
@@ -15,7 +16,6 @@ const formatMoney = (v) =>
 const formatQty = (v, unit) =>
   `${Number(v || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ${unit || ""}`.trim();
 
-// ── SHARED STYLES (matching StockManagement) ─────────────────
 const thStyle = {
   padding: "10px 14px", textAlign: "left", fontSize: "11px", fontWeight: "600",
   color: "#6b6b6b", borderBottom: "2px solid #e0ddd5", background: "#f5f3ee",
@@ -27,6 +27,8 @@ const inputStyle = { width: "100%", padding: "10px 12px", border: "1px solid #d0
 const iconBtnStyle = { border: "none", borderRadius: "6px", cursor: "pointer", width: "32px", height: "30px", display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" };
 const primaryBtn = { padding: "10px 20px", background: "#1a1a2e", color: "#c9a84c", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "600", fontSize: "14px" };
 const secondaryBtn = { padding: "10px 20px", background: "#eef1f5", color: "#1a1a2e", border: "1px solid #d0cdc6", borderRadius: "8px", cursor: "pointer", fontWeight: "600", fontSize: "14px" };
+
+const RELEASE_REASONS = ["Usage", "Wastage", "Spoilage", "Other"];
 
 // ── SEARCHABLE INGREDIENT DROPDOWN ───────────────────────────
 function IngredientSearch({ ingredients, value, onChange }) {
@@ -117,8 +119,9 @@ export default function IngredientStock() {
   const [to, setTo] = useState(defaultRange.today);
 
   // ── FORM VISIBILITY ──
-  const [showForm, setShowForm] = useState(false);       // stock-in form
-  const [showNewForm, setShowNewForm] = useState(false); // new ingredient form
+  const [showStockInForm, setShowStockInForm] = useState(false);
+  const [showNewForm, setShowNewForm] = useState(false);
+  const [showReleaseForm, setShowReleaseForm] = useState(false);
   const [editingIngredient, setEditingIngredient] = useState(null);
 
   // ── STOCK-IN FORM ──
@@ -127,19 +130,23 @@ export default function IngredientStock() {
   const [stockCostPerUnit, setStockCostPerUnit] = useState("");
   const [stockNotes, setStockNotes] = useState("");
 
+  // ── STOCK RELEASE FORM ──
+  const [releaseIngredientId, setReleaseIngredientId] = useState(null);
+  const [releaseQty, setReleaseQty] = useState("");
+  const [releaseReason, setReleaseReason] = useState("");
+  const [releaseCustomNote, setReleaseCustomNote] = useState("");
+
   // ── NEW INGREDIENT FORM ──
   const [newName, setNewName] = useState("");
   const [newUnit, setNewUnit] = useState("kg");
   const [newMinQty, setNewMinQty] = useState("5");
   const [newNotes, setNewNotes] = useState("");
-  const [newLowStockAlert, setNewLowStockAlert] = useState(true);
 
   // ── EDIT FORM ──
   const [editName, setEditName] = useState("");
   const [editUnit, setEditUnit] = useState("");
   const [editMinQty, setEditMinQty] = useState("");
   const [editNotes, setEditNotes] = useState("");
-  const [editLowStockAlert, setEditLowStockAlert] = useState(true);
 
   // ── DATA FETCHING ─────────────────────────────────────────
   const fetchIngredients = async () => {
@@ -154,7 +161,7 @@ export default function IngredientStock() {
   const fetchHistory = async () => {
     setHistoryLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/ingredient-stock/history?from=${from}&to=${to}`, { headers: getAuthHeaders() });
+      const res = await fetch(`${ING_BASE_URL}/history?from=${from}&to=${to}`, { headers: getAuthHeaders() });
       const data = await res.json();
       setHistory(Array.isArray(data) ? data : []);
     } catch { setErrorMessage("Failed to load ingredient history."); }
@@ -167,7 +174,7 @@ export default function IngredientStock() {
       try {
         const [ingRes, histRes] = await Promise.all([
           fetch(ING_URL, { headers: getAuthHeaders() }),
-          fetch(`${API_BASE_URL}/ingredient-stock/history?from=${defaultRange.monthStart}&to=${defaultRange.today}`, { headers: getAuthHeaders() }),
+          fetch(`${ING_BASE_URL}/history?from=${defaultRange.monthStart}&to=${defaultRange.today}`, { headers: getAuthHeaders() }),
         ]);
         const [ingData, histData] = await Promise.all([ingRes.json(), histRes.json()]);
         if (isActive) {
@@ -175,8 +182,8 @@ export default function IngredientStock() {
           setHistory(Array.isArray(histData) ? histData : []);
         }
       } catch (err) {
-  if (isActive) setErrorMessage("Failed to load ingredient data: " + err.message);
-   } finally {
+        if (isActive) setErrorMessage("Failed to load ingredient data: " + err.message);
+      } finally {
         if (isActive) { setLoading(false); setHistoryLoading(false); }
       }
     };
@@ -196,21 +203,57 @@ export default function IngredientStock() {
     return () => clearTimeout(t);
   }, [errorMessage]);
 
-  // ── HANDLERS ─────────────────────────────────────────────
-  const resetStockForm = () => { setStockIngredientId(null); setStockQty(""); setStockCostPerUnit(""); setStockNotes(""); };
-  const resetNewForm = () => { setNewName(""); setNewUnit("kg"); setNewMinQty("5"); setNewNotes(""); setNewLowStockAlert(true); };
+  // ── HELPERS ──────────────────────────────────────────────
+  const closeAllForms = () => {
+    setShowStockInForm(false);
+    setShowNewForm(false);
+    setShowReleaseForm(false);
+    setEditingIngredient(null);
+  };
 
+  const resetStockInForm = () => { setStockIngredientId(null); setStockQty(""); setStockCostPerUnit(""); setStockNotes(""); };
+  const resetReleaseForm = () => { setReleaseIngredientId(null); setReleaseQty(""); setReleaseReason(""); setReleaseCustomNote(""); };
+  const resetNewForm = () => { setNewName(""); setNewUnit("kg"); setNewMinQty("5"); setNewNotes(""); };
+
+  // ── HANDLERS ─────────────────────────────────────────────
   const handleStockIn = async () => {
     if (!stockIngredientId || !stockQty) { setErrorMessage("Ingredient and quantity are required."); return; }
     try {
-      const res = await fetch(`${API_BASE_URL}/ingredient-stock/stock-in`, {
+      const res = await fetch(`${ING_BASE_URL}/stock-in`, {
         method: "POST", headers: getAuthHeaders(),
         body: JSON.stringify({ ingredientId: stockIngredientId, quantity: Number(stockQty), costPerUnit: Number(stockCostPerUnit || 0), notes: stockNotes || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setSuccessMessage("Stock recorded successfully!");
-      resetStockForm(); setShowForm(false);
+      resetStockInForm(); setShowStockInForm(false);
+      await fetchIngredients(); await fetchHistory();
+    } catch (err) { setErrorMessage(err.message); }
+  };
+
+  const handleRelease = async () => {
+    if (!releaseIngredientId || !releaseQty) { setErrorMessage("Ingredient and quantity are required."); return; }
+
+    const releaseIngredient = ingredients.find((i) => i.id === releaseIngredientId);
+    if (Number(releaseQty) > Number(releaseIngredient?.current_quantity)) {
+      setErrorMessage("Cannot release more than available stock."); return;
+    }
+
+    // Build notes from reason + custom note
+    const noteParts = [];
+    if (releaseReason) noteParts.push(releaseReason);
+    if (releaseCustomNote) noteParts.push(releaseCustomNote);
+    const notes = noteParts.join(" — ") || undefined;
+
+    try {
+      const res = await fetch(`${ING_BASE_URL}/stock-out`, {
+        method: "POST", headers: getAuthHeaders(),
+        body: JSON.stringify({ ingredientId: releaseIngredientId, quantity: Number(releaseQty), notes }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setSuccessMessage("Stock released successfully!");
+      resetReleaseForm(); setShowReleaseForm(false);
       await fetchIngredients(); await fetchHistory();
     } catch (err) { setErrorMessage(err.message); }
   };
@@ -220,7 +263,7 @@ export default function IngredientStock() {
     try {
       const res = await fetch(ING_URL, {
         method: "POST", headers: getAuthHeaders(),
-        body: JSON.stringify({ name: newName, defaultUnit: newUnit, minimumQuantity: Number(newMinQty || 0), enableLowStockAlert: newLowStockAlert, notes: newNotes || undefined }),
+        body: JSON.stringify({ name: newName, defaultUnit: newUnit, minimumQuantity: Number(newMinQty || 0), notes: newNotes || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -231,13 +274,12 @@ export default function IngredientStock() {
   };
 
   const startEdit = (ing) => {
+    closeAllForms();
     setEditingIngredient(ing);
     setEditName(ing.name);
     setEditUnit(ing.default_unit || "kg");
     setEditMinQty(ing.minimum_quantity);
     setEditNotes(ing.notes || "");
-    setEditLowStockAlert(ing.enable_low_stock_alert === 1);
-    setShowForm(false); setShowNewForm(false);
   };
 
   const handleEdit = async () => {
@@ -245,7 +287,7 @@ export default function IngredientStock() {
     try {
       const res = await fetch(`${ING_URL}/${editingIngredient.id}`, {
         method: "PUT", headers: getAuthHeaders(),
-        body: JSON.stringify({ name: editName, defaultUnit: editUnit, minimumQuantity: Number(editMinQty || 0), enableLowStockAlert: editLowStockAlert, notes: editNotes || undefined }),
+        body: JSON.stringify({ name: editName, defaultUnit: editUnit, minimumQuantity: Number(editMinQty || 0), notes: editNotes || undefined }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -270,21 +312,17 @@ export default function IngredientStock() {
   const filteredIngredients = ingredients.filter((i) =>
     i.name.toLowerCase().includes(search.toLowerCase())
   );
-
-  const selectedIngredient = ingredients.find((i) => i.id === stockIngredientId);
-
+  const selectedStockIngredient = ingredients.find((i) => i.id === stockIngredientId);
+  const selectedReleaseIngredient = ingredients.find((i) => i.id === releaseIngredientId);
   const totalInventoryValue = ingredients.reduce((sum, i) =>
     sum + Number(i.current_quantity || 0) * Number(i.average_cost || 0), 0
   );
-
   const totalHistoryCost = history
     .filter((h) => h.movement_type === "IN")
     .reduce((s, h) => s + Number(h.total_cost || 0), 0);
-
   const lowStockCount = ingredients.filter(
     (i) => Number(i.current_quantity) > 0 && Number(i.current_quantity) <= Number(i.minimum_quantity)
   ).length;
-
   const outOfStockCount = ingredients.filter((i) => Number(i.current_quantity) === 0).length;
 
   // ── RENDER ───────────────────────────────────────────────
@@ -293,16 +331,21 @@ export default function IngredientStock() {
 
       {/* ACTION BAR */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
           <button
-            onClick={() => { setShowNewForm(!showNewForm); setShowForm(false); setEditingIngredient(null); resetNewForm(); }}
+            onClick={() => { closeAllForms(); setShowNewForm(!showNewForm); resetNewForm(); }}
             style={{ ...primaryBtn, display: "inline-flex", alignItems: "center", gap: "8px" }}>
             <FaPlus /> {showNewForm ? "Cancel" : "New Ingredient"}
           </button>
           <button
-            onClick={() => { setShowForm(!showForm); setShowNewForm(false); setEditingIngredient(null); resetStockForm(); }}
-            style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 18px", background: showForm ? "#eef1f5" : "#f5f3ee", color: "#1a1a2e", border: "1px solid #d0cdc6", borderRadius: "8px", cursor: "pointer", fontWeight: "600", fontSize: "14px" }}>
-            <FaWarehouse size={13} /> {showForm ? "Cancel" : "Record Stock In"}
+            onClick={() => { closeAllForms(); setShowStockInForm(!showStockInForm); resetStockInForm(); }}
+            style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 18px", background: "#f5f3ee", color: "#1a1a2e", border: "1px solid #d0cdc6", borderRadius: "8px", cursor: "pointer", fontWeight: "600", fontSize: "14px" }}>
+            <FaWarehouse size={13} /> {showStockInForm ? "Cancel" : "Record Stock In"}
+          </button>
+          <button
+            onClick={() => { closeAllForms(); setShowReleaseForm(!showReleaseForm); resetReleaseForm(); }}
+            style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 18px", background: showReleaseForm ? "#fef2f2" : "#fff8e1", color: "#b45309", border: "1px solid #fde68a", borderRadius: "8px", cursor: "pointer", fontWeight: "600", fontSize: "14px" }}>
+            <FaMinusCircle size={13} /> {showReleaseForm ? "Cancel" : "Release to Kitchen"}
           </button>
         </div>
       </div>
@@ -338,7 +381,7 @@ export default function IngredientStock() {
             <div>
               <label style={labelStyle}>Unit of Measurement</label>
               <select value={newUnit} onChange={(e) => setNewUnit(e.target.value)} style={inputStyle}>
-                {["kg", "g", "litres", "ml", "pcs", "dozen", "trays", "bags", "boxes"].map((u) => (
+                {["kg", "g", "litres", "ml", "pcs", "pieces", "dozen", "trays", "bags", "boxes"].map((u) => (
                   <option key={u} value={u}>{u}</option>
                 ))}
               </select>
@@ -351,10 +394,6 @@ export default function IngredientStock() {
               <label style={labelStyle}>Notes (optional)</label>
               <input type="text" value={newNotes} onChange={(e) => setNewNotes(e.target.value)} placeholder="e.g. Store in freezer" style={inputStyle} />
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <input type="checkbox" id="newAlert" checked={newLowStockAlert} onChange={(e) => setNewLowStockAlert(e.target.checked)} style={{ width: "16px", height: "16px", cursor: "pointer" }} />
-              <label htmlFor="newAlert" style={{ fontSize: "13px", fontWeight: "600", color: "#1a1a2e", cursor: "pointer" }}>Enable Low Stock Alert</label>
-            </div>
           </div>
           <div style={{ display: "flex", gap: "10px" }}>
             <button onClick={handleNewIngredient} style={primaryBtn}>Create Ingredient</button>
@@ -364,7 +403,7 @@ export default function IngredientStock() {
       )}
 
       {/* STOCK-IN FORM */}
-      {showForm && (
+      {showStockInForm && (
         <div style={{ background: "#fff", border: "1px solid #e0ddd5", borderRadius: "12px", padding: "24px", marginBottom: "24px" }}>
           <h3 style={{ margin: "0 0 18px", fontSize: "16px", fontWeight: "700" }}>📦 Record Stock In</h3>
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: "16px", marginBottom: "16px" }}>
@@ -373,7 +412,7 @@ export default function IngredientStock() {
               <IngredientSearch ingredients={ingredients} value={stockIngredientId} onChange={setStockIngredientId} />
             </div>
             <div>
-              <label style={labelStyle}>Quantity Received{selectedIngredient ? ` (${selectedIngredient.default_unit})` : ""}</label>
+              <label style={labelStyle}>Quantity Received{selectedStockIngredient ? ` (${selectedStockIngredient.default_unit})` : ""}</label>
               <input type="number" min="0.01" step="0.01" value={stockQty} onChange={(e) => setStockQty(e.target.value)} placeholder="e.g. 20" style={inputStyle} />
             </div>
             <div>
@@ -385,15 +424,13 @@ export default function IngredientStock() {
               <input type="text" value={stockNotes} onChange={(e) => setStockNotes(e.target.value)} placeholder="e.g. Supplier: XYZ Distributors" style={inputStyle} />
             </div>
           </div>
-
-          {/* STOCK-IN PREVIEW */}
-          {selectedIngredient && stockQty && (
+          {selectedStockIngredient && stockQty && (
             <div style={{ background: "#f5f3ee", border: "1px solid #e0ddd5", borderRadius: "8px", padding: "14px 18px", marginBottom: "16px", display: "flex", gap: "28px", flexWrap: "wrap" }}>
               {[
-                { label: "Ingredient", value: selectedIngredient.name },
-                { label: "Current Stock", value: formatQty(selectedIngredient.current_quantity, selectedIngredient.default_unit) },
-                { label: "Adding", value: `+${formatQty(stockQty, selectedIngredient.default_unit)}`, color: "#2e7d32" },
-                { label: "New Stock", value: formatQty(Number(selectedIngredient.current_quantity) + Number(stockQty), selectedIngredient.default_unit), color: "#2e7d32" },
+                { label: "Ingredient", value: selectedStockIngredient.name },
+                { label: "Current Stock", value: formatQty(selectedStockIngredient.current_quantity, selectedStockIngredient.default_unit) },
+                { label: "Adding", value: `+${formatQty(stockQty, selectedStockIngredient.default_unit)}`, color: "#2e7d32" },
+                { label: "New Stock", value: formatQty(Number(selectedStockIngredient.current_quantity) + Number(stockQty), selectedStockIngredient.default_unit), color: "#2e7d32" },
                 ...(stockCostPerUnit ? [{ label: "Total Cost", value: formatMoney(Number(stockQty) * Number(stockCostPerUnit)) }] : []),
               ].map((item) => (
                 <div key={item.label}>
@@ -403,10 +440,82 @@ export default function IngredientStock() {
               ))}
             </div>
           )}
-
           <div style={{ display: "flex", gap: "10px" }}>
             <button onClick={handleStockIn} style={primaryBtn}>Confirm Stock In</button>
-            <button onClick={() => { setShowForm(false); resetStockForm(); }} style={secondaryBtn}>Cancel</button>
+            <button onClick={() => { setShowStockInForm(false); resetStockInForm(); }} style={secondaryBtn}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* STOCK RELEASE FORM */}
+      {showReleaseForm && (
+        <div style={{ background: "#fff", border: "1px solid #fde68a", borderRadius: "12px", padding: "24px", marginBottom: "24px" }}>
+          <h3 style={{ margin: "0 0 6px", fontSize: "16px", fontWeight: "700" }}>🍳 Release to Kitchen</h3>
+          <p style={{ margin: "0 0 18px", fontSize: "13px", color: "#6b6b6b" }}>Record ingredients being released for kitchen use. This will deduct from current stock.</p>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "16px", marginBottom: "16px" }}>
+            <div>
+              <label style={labelStyle}>Ingredient</label>
+              <IngredientSearch ingredients={ingredients} value={releaseIngredientId} onChange={setReleaseIngredientId} />
+            </div>
+            <div>
+              <label style={labelStyle}>Quantity{selectedReleaseIngredient ? ` (${selectedReleaseIngredient.default_unit})` : ""}</label>
+              <input type="number" min="0.01" step="0.01" value={releaseQty} onChange={(e) => setReleaseQty(e.target.value)} placeholder="e.g. 2" style={inputStyle} />
+            </div>
+          </div>
+
+          {/* REASON SELECTOR */}
+          <div style={{ marginBottom: "16px" }}>
+            <label style={labelStyle}>Reason (optional)</label>
+            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
+              {RELEASE_REASONS.map((r) => (
+                <button key={r} onClick={() => setReleaseReason(releaseReason === r ? "" : r)}
+                  style={{
+                    padding: "6px 16px", borderRadius: "20px", fontSize: "13px", cursor: "pointer", fontWeight: "600", border: "1px solid",
+                    background: releaseReason === r ? "#1a1a2e" : "#fff",
+                    color: releaseReason === r ? "#c9a84c" : "#4a4a4a",
+                    borderColor: releaseReason === r ? "#1a1a2e" : "#d0cdc6",
+                  }}>
+                  {r}
+                </button>
+              ))}
+            </div>
+            <input type="text" value={releaseCustomNote} onChange={(e) => setReleaseCustomNote(e.target.value)}
+              placeholder="Additional notes e.g. used for lunch service..." style={inputStyle} />
+          </div>
+
+          {/* RELEASE PREVIEW */}
+          {selectedReleaseIngredient && releaseQty && (
+            <div style={{ background: "#fff8e1", border: "1px solid #fde68a", borderRadius: "8px", padding: "14px 18px", marginBottom: "16px", display: "flex", gap: "28px", flexWrap: "wrap" }}>
+              {[
+                { label: "Ingredient", value: selectedReleaseIngredient.name },
+                { label: "Current Stock", value: formatQty(selectedReleaseIngredient.current_quantity, selectedReleaseIngredient.default_unit) },
+                { label: "Releasing", value: `-${formatQty(releaseQty, selectedReleaseIngredient.default_unit)}`, color: "#dc2626" },
+                {
+                  label: "Remaining",
+                  value: formatQty(Math.max(0, Number(selectedReleaseIngredient.current_quantity) - Number(releaseQty)), selectedReleaseIngredient.default_unit),
+                  color: Number(selectedReleaseIngredient.current_quantity) - Number(releaseQty) <= Number(selectedReleaseIngredient.minimum_quantity) ? "#d97706" : "#2e7d32"
+                },
+              ].map((item) => (
+                <div key={item.label}>
+                  <p style={{ margin: 0, fontSize: "11px", color: "#6b6b6b", textTransform: "uppercase", letterSpacing: "0.05em" }}>{item.label}</p>
+                  <p style={{ margin: 0, fontWeight: "700", fontSize: "15px", color: item.color || "#1a1a2e" }}>{item.value}</p>
+                </div>
+              ))}
+              {/* Low stock warning */}
+              {Number(selectedReleaseIngredient.current_quantity) - Number(releaseQty) <= Number(selectedReleaseIngredient.minimum_quantity) && Number(releaseQty) > 0 && (
+                <div style={{ width: "100%", background: "#fff3cd", border: "1px solid #fde68a", borderRadius: "6px", padding: "8px 12px", fontSize: "13px", color: "#b45309", fontWeight: "600" }}>
+                  ⚠️ This will bring stock below the minimum level ({formatQty(selectedReleaseIngredient.minimum_quantity, selectedReleaseIngredient.default_unit)})
+                </div>
+              )}
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: "10px" }}>
+            <button onClick={handleRelease}
+              style={{ padding: "10px 20px", background: "#b45309", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "600", fontSize: "14px" }}>
+              Confirm Release
+            </button>
+            <button onClick={() => { setShowReleaseForm(false); resetReleaseForm(); }} style={secondaryBtn}>Cancel</button>
           </div>
         </div>
       )}
@@ -423,7 +532,7 @@ export default function IngredientStock() {
             <div>
               <label style={labelStyle}>Unit of Measurement</label>
               <select value={editUnit} onChange={(e) => setEditUnit(e.target.value)} style={inputStyle}>
-                {["kg", "g", "litres", "ml", "pcs", "dozen", "trays", "bags", "boxes"].map((u) => (
+                {["kg", "g", "litres", "ml", "pcs", "pieces", "dozen", "trays", "bags", "boxes"].map((u) => (
                   <option key={u} value={u}>{u}</option>
                 ))}
               </select>
@@ -435,10 +544,6 @@ export default function IngredientStock() {
             <div style={{ gridColumn: "1 / -1" }}>
               <label style={labelStyle}>Notes (optional)</label>
               <input type="text" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} placeholder="e.g. Store in freezer" style={inputStyle} />
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <input type="checkbox" id="editAlert" checked={editLowStockAlert} onChange={(e) => setEditLowStockAlert(e.target.checked)} style={{ width: "16px", height: "16px", cursor: "pointer" }} />
-              <label htmlFor="editAlert" style={{ fontSize: "13px", fontWeight: "600", color: "#1a1a2e", cursor: "pointer" }}>Enable Low Stock Alert</label>
             </div>
           </div>
           <div style={{ display: "flex", gap: "10px" }}>
@@ -491,7 +596,7 @@ export default function IngredientStock() {
                   style={{ transition: "background 0.15s" }}>
                   <td style={{ ...tdStyle, fontWeight: "600" }}>
                     {ing.name}
-                    {ing.notes && <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#9ca3af", fontWeight: "400" }}>{ing.notes}</p>}
+                    {ing.notes && <p style={{ margin: "3px 0 0", fontSize: "12px", color: "#6b6b6b", fontWeight: "400", fontStyle: "italic" }}>{ing.notes}</p>}
                   </td>
                   <td style={tdStyle}>
                     <span style={{ background: "#f0ede6", color: "#6b6b6b", padding: "2px 8px", borderRadius: "20px", fontSize: "12px" }}>
@@ -540,7 +645,6 @@ export default function IngredientStock() {
               );
             })}
           </tbody>
-          {/* INVENTORY VALUE FOOTER */}
           {!loading && filteredIngredients.length > 0 && (
             <tfoot>
               <tr style={{ background: "#f5f3ee" }}>
@@ -556,10 +660,10 @@ export default function IngredientStock() {
         </table>
       </div>
 
-      {/* PURCHASE HISTORY */}
+      {/* MOVEMENT HISTORY */}
       <div style={{ background: "#fff", border: "1px solid #e0ddd5", borderRadius: "12px", overflow: "hidden" }}>
         <div style={{ padding: "14px 20px", borderBottom: "2px solid #e0ddd5", background: "#f5f3ee", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
-          <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "700" }}>Ingredient Purchase History</h3>
+          <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "700" }}>Stock Movement History</h3>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
             <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
               style={{ padding: "7px 10px", border: "1px solid #d0cdc6", borderRadius: "7px", fontSize: "13px", outline: "none" }} />
@@ -573,16 +677,19 @@ export default function IngredientStock() {
           </div>
         </div>
 
-        {/* HISTORY SUMMARY BAR */}
         {!historyLoading && history.length > 0 && (
           <div style={{ padding: "12px 20px", background: "#faf9f6", borderBottom: "1px solid #e0ddd5", display: "flex", gap: "24px", flexWrap: "wrap" }}>
             <div>
-              <span style={{ fontSize: "12px", color: "#6b6b6b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Total Spent: </span>
+              <span style={{ fontSize: "12px", color: "#6b6b6b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Total Purchased: </span>
               <span style={{ fontWeight: "700", color: "#1a1a2e" }}>{formatMoney(totalHistoryCost)}</span>
             </div>
             <div>
-              <span style={{ fontSize: "12px", color: "#6b6b6b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Records: </span>
-              <span style={{ fontWeight: "700", color: "#1a1a2e" }}>{history.filter((h) => h.movement_type === "IN").length}</span>
+              <span style={{ fontSize: "12px", color: "#6b6b6b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Stock-In Records: </span>
+              <span style={{ fontWeight: "700", color: "#2e7d32" }}>{history.filter((h) => h.movement_type === "IN").length}</span>
+            </div>
+            <div>
+              <span style={{ fontSize: "12px", color: "#6b6b6b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Release Records: </span>
+              <span style={{ fontWeight: "700", color: "#b45309" }}>{history.filter((h) => h.movement_type === "OUT").length}</span>
             </div>
           </div>
         )}
@@ -596,7 +703,7 @@ export default function IngredientStock() {
               <th style={thStyle}>Unit</th>
               <th style={thStyle}>Cost / Unit</th>
               <th style={thStyle}>Total Cost</th>
-              <th style={thStyle}>Notes</th>
+              <th style={thStyle}>Notes / Reason</th>
               <th style={thStyle}>Date</th>
             </tr>
           </thead>
@@ -613,21 +720,21 @@ export default function IngredientStock() {
                 <td style={{ ...tdStyle, fontWeight: "600" }}>{h.ingredientName}</td>
                 <td style={tdStyle}>
                   <span style={{
-                    background: h.movement_type === "IN" ? "#e8f5e9" : "#fef2f2",
-                    color: h.movement_type === "IN" ? "#2e7d32" : "#dc2626",
-                    border: `1px solid ${h.movement_type === "IN" ? "#c8e6c9" : "#fecaca"}`,
+                    background: h.movement_type === "IN" ? "#e8f5e9" : "#fff8e1",
+                    color: h.movement_type === "IN" ? "#2e7d32" : "#b45309",
+                    border: `1px solid ${h.movement_type === "IN" ? "#c8e6c9" : "#fde68a"}`,
                     padding: "2px 8px", borderRadius: "20px", fontSize: "11px", fontWeight: "600",
                   }}>
-                    {h.movement_type === "IN" ? "Stock In" : "Stock Out"}
+                    {h.movement_type === "IN" ? "Stock In" : "Kitchen Release"}
                   </span>
                 </td>
-                <td style={{ ...tdStyle, fontWeight: "600", color: h.movement_type === "IN" ? "#2e7d32" : "#dc2626" }}>
+                <td style={{ ...tdStyle, fontWeight: "600", color: h.movement_type === "IN" ? "#2e7d32" : "#b45309" }}>
                   {h.movement_type === "IN" ? "+" : "-"}{Number(h.quantity).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                 </td>
                 <td style={tdStyle}>{h.unit || "—"}</td>
                 <td style={tdStyle}>{Number(h.cost_per_unit) > 0 ? formatMoney(h.cost_per_unit) : <span style={{ color: "#9ca3af" }}>—</span>}</td>
                 <td style={{ ...tdStyle, fontWeight: "600" }}>{Number(h.total_cost) > 0 ? formatMoney(h.total_cost) : <span style={{ color: "#9ca3af" }}>—</span>}</td>
-                <td style={{ ...tdStyle, color: "#6b6b6b", fontSize: "13px" }}>{h.notes || <span style={{ color: "#9ca3af" }}>—</span>}</td>
+                <td style={{ ...tdStyle, color: "#6b6b6b", fontSize: "13px", fontStyle: h.notes ? "italic" : "normal" }}>{h.notes || <span style={{ color: "#9ca3af" }}>—</span>}</td>
                 <td style={{ ...tdStyle, color: "#6b6b6b", fontSize: "13px" }}>{new Date(h.created_at).toLocaleString()}</td>
               </tr>
             ))}
