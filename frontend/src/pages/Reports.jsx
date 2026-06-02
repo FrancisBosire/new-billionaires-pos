@@ -1,8 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 
-
 const API_BASE_URL = import.meta.env.VITE_API_URL;
-
 const REPORTS_URL = `${API_BASE_URL}/reports`;
 
 const getHeaders = () => ({ Authorization: `Bearer ${sessionStorage.getItem("token")}` });
@@ -104,7 +102,6 @@ function StatCard({ label, value, sub, accent }) {
   );
 }
 
-
 const TABS = ["Overview", "Sales Trends", "Products", "Food", "Cashiers", "Stock"];
 
 const sumMetric = (items, key) =>
@@ -138,6 +135,21 @@ const getItemTypeBreakdown = (data) => {
   return fallback;
 };
 
+const getTypeMetric = (data, type, key) => {
+  const item = (data.itemTypeBreakdown || []).find(
+    (entry) => String(entry.type).toLowerCase() === type
+  );
+
+  if (item) return Number(item[key] || 0);
+
+  const fallbackItems =
+    type === "bar"
+      ? (data.topByRevenue?.length ? data.topByRevenue : data.topByQuantity || [])
+      : (data.foodByRevenue?.length ? data.foodByRevenue : data.foodByQuantity || []);
+
+  return sumMetric(fallbackItems, key);
+};
+
 const getQuickRange = (key) => {
   const now = new Date();
   const pad = (n) => String(n).padStart(2, "0");
@@ -163,53 +175,43 @@ export default function Reports() {
   const [productView, setProductView] = useState("quantity");
 
   const fetchReports = useCallback(async (from, to) => {
-    setLoading(true); setError("");
+    setLoading(true);
+    setError("");
+
     try {
-      const res = await fetch(`${REPORTS_URL}?from=${from}&to=${to}`, { headers: getHeaders() });
+      const params = new URLSearchParams({ from, to });
+      const res = await fetch(`${REPORTS_URL}?${params.toString()}`, { headers: getHeaders() });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Failed");
       setData(d);
-    } catch { setError("Failed to load reports."); }
-    finally { setLoading(false); }
+    } catch {
+      setError("Failed to load reports.");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
-    let isActive = true;
-    const { from, to } = getQuickRange(quickFilter);
+    const { from, to } = getQuickRange("month");
+    const timer = setTimeout(() => fetchReports(from, to), 0);
 
-    fetch(`${REPORTS_URL}?from=${from}&to=${to}`, { headers: getHeaders() })
-      .then((res) =>
-        res.json().then((d) => {
-          if (!res.ok) {
-            throw new Error(d.error || "Failed");
-          }
+    return () => clearTimeout(timer);
+  }, [fetchReports]);
 
-          return d;
-        })
-      )
-      .then((d) => {
-        if (isActive) {
-          setData(d);
-        }
-      })
-      .catch(() => {
-        if (isActive) {
-          setError("Failed to load reports.");
-        }
-      })
-      .finally(() => {
-        if (isActive) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      isActive = false;
-    };
-  }, [quickFilter]);
+  const handleQuickFilter = (key) => {
+    const { from, to } = getQuickRange(key);
+    setQuickFilter(key);
+    fetchReports(from, to);
+  };
 
   const handleCustomFilter = () => {
     if (!customFrom || !customTo) return;
+    if (customFrom > customTo) {
+      setError("Start date cannot be after end date.");
+      return;
+    }
+
+    setQuickFilter("");
     fetchReports(customFrom, customTo);
   };
 
@@ -221,11 +223,7 @@ export default function Reports() {
   });
 
   const quickBtn = (key, label) => (
-    <button key={key} onClick={() => {
-      setLoading(true);
-      setError("");
-      setQuickFilter(key);
-    }} style={{
+    <button key={key} onClick={() => handleQuickFilter(key)} style={{
       padding: "7px 14px", borderRadius: "7px",
       border: quickFilter === key ? "1px solid #c9a84c" : "1px solid #d0cdc6",
       background: quickFilter === key ? "#1a1a2e" : "#fff",
@@ -277,6 +275,12 @@ export default function Reports() {
             const margin = revenue > 0 ? ((profit / revenue) * 100).toFixed(1) : 0;
             const hasCostData = cost > 0;
 
+            const totalRevenue = Number(data.overview.totalRevenue || 0);
+            const foodRevenue = Number(data.overview.foodRevenue ?? getTypeMetric(data, "food", "totalRevenue"));
+            const barRevenue = Number(data.overview.barRevenue ?? getTypeMetric(data, "bar", "totalRevenue"));
+            const barPct = totalRevenue > 0 ? ((barRevenue / totalRevenue) * 100).toFixed(1) : 0;
+            const foodPct = totalRevenue > 0 ? ((foodRevenue / totalRevenue) * 100).toFixed(1) : 0;
+
             return (
               <div>
                 {/* Sales cards */}
@@ -285,6 +289,22 @@ export default function Reports() {
                   <StatCard label="Avg Order Value" value={formatMoney(data.overview.avgOrder)} sub="per transaction" accent="#1a1a2e" />
                   <StatCard label="Today's Revenue" value={formatMoney(data.overview.todayRevenue)} sub={`${formatNum(data.overview.todayOrders)} orders today`} accent="#2e7d32" />
                   <StatCard label="Total Orders" value={formatNum(data.overview.totalOrders)} sub="in selected period" accent="#1565c0" />
+                </div>
+
+                {/* Revenue breakdown - Bar vs Food */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "16px", marginBottom: "16px" }}>
+                  <StatCard
+                    label="Bar Revenue"
+                    value={formatMoney(barRevenue)}
+                    sub={`${barPct}% of total`}
+                    accent="#c9a84c"
+                  />
+                  <StatCard
+                    label="Food Revenue"
+                    value={formatMoney(foodRevenue)}
+                    sub={`${foodPct}% of total`}
+                    accent="#1565c0"
+                  />
                 </div>
 
                 {/* Profit cards */}
@@ -587,9 +607,10 @@ export default function Reports() {
           {/* ── STOCK TAB ── */}
           {activeTab === "Stock" && (
             <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+              {/* Drinks/Products Low Stock */}
               <div style={{ background: "#fff", border: "1px solid #e0ddd5", borderRadius: "10px", overflow: "hidden" }}>
                 <div style={{ padding: "16px 20px", borderBottom: "2px solid #e0ddd5", background: "#f5f3ee" }}>
-                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "700" }}>⚠️ Low Stock Alert</h3>
+                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "700" }}>🍺 Drinks - Low Stock Alert</h3>
                 </div>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
@@ -603,7 +624,7 @@ export default function Reports() {
                   </thead>
                   <tbody>
                     {data.lowStock.length === 0 ? (
-                      <tr><td colSpan={5} style={{ ...tdStyle, textAlign: "center", color: "#2e7d32" }}>✅ All products are well stocked</td></tr>
+                      <tr><td colSpan={5} style={{ ...tdStyle, textAlign: "center", color: "#2e7d32" }}>✅ All drinks are well stocked</td></tr>
                     ) : data.lowStock.map((p, i) => (
                       <tr key={i} {...hoverRow}>
                         <td style={{ ...tdStyle, fontWeight: "600" }}>{p.name}</td>
@@ -625,9 +646,59 @@ export default function Reports() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Food Ingredients Low Stock */}
               <div style={{ background: "#fff", border: "1px solid #e0ddd5", borderRadius: "10px", overflow: "hidden" }}>
                 <div style={{ padding: "16px 20px", borderBottom: "2px solid #e0ddd5", background: "#f5f3ee" }}>
-                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "700" }}>Stock Movements</h3>
+                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "700" }}>🥕 Food Ingredients - Low Stock Alert</h3>
+                </div>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      <th style={thStyle}>Ingredient</th>
+                      <th style={thStyle}>Unit</th>
+                      <th style={thStyle}>Current Stock</th>
+                      <th style={thStyle}>Minimum</th>
+                      <th style={thStyle}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(!data.ingredientLowStock || data.ingredientLowStock.length === 0) ? (
+                      <tr><td colSpan={5} style={{ ...tdStyle, textAlign: "center", color: "#2e7d32" }}>✅ All ingredients are well stocked</td></tr>
+                    ) : data.ingredientLowStock.map((ing, i) => (
+                      <tr key={i} {...hoverRow}>
+                        <td style={{ ...tdStyle, fontWeight: "600" }}>{ing.name}</td>
+                        <td style={tdStyle}>
+                          <span style={{ background: "#f0ede6", color: "#6b6b6b", padding: "2px 8px", borderRadius: "20px", fontSize: "12px" }}>
+                            {ing.default_unit || "units"}
+                          </span>
+                        </td>
+                        <td style={{ ...tdStyle, color: ing.current_quantity === 0 ? "#dc2626" : "#d97706", fontWeight: "700" }}>
+                          {Number(ing.current_quantity).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                        </td>
+                        <td style={{ ...tdStyle, color: "#6b6b6b" }}>
+                          {Number(ing.minimum_quantity).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                        </td>
+                        <td style={tdStyle}>
+                          <span style={{
+                            background: ing.current_quantity === 0 ? "#fef2f2" : "#fff8e1",
+                            color: ing.current_quantity === 0 ? "#dc2626" : "#d97706",
+                            border: `1px solid ${ing.current_quantity === 0 ? "#fecaca" : "#fde68a"}`,
+                            padding: "2px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600",
+                          }}>
+                            {ing.current_quantity === 0 ? "Out of Stock" : "Low Stock"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Stock Movements */}
+              <div style={{ background: "#fff", border: "1px solid #e0ddd5", borderRadius: "10px", overflow: "hidden" }}>
+                <div style={{ padding: "16px 20px", borderBottom: "2px solid #e0ddd5", background: "#f5f3ee" }}>
+                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "700" }}>📦 Stock Movements (Drinks)</h3>
                 </div>
                 <table style={{ width: "100%", borderCollapse: "collapse" }}>
                   <thead>
@@ -657,6 +728,54 @@ export default function Reports() {
                         <td style={tdStyle}>{m.quantity}</td>
                         <td style={{ ...tdStyle, color: "#6b6b6b", fontSize: "13px" }}>{new Date(m.created_at).toLocaleString()}</td>
                       </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Food Ingredient Movements */}
+              <div style={{ background: "#fff", border: "1px solid #e0ddd5", borderRadius: "10px", overflow: "hidden" }}>
+                <div style={{ padding: "16px 20px", borderBottom: "2px solid #e0ddd5", background: "#f5f3ee" }}>
+                  <h3 style={{ margin: 0, fontSize: "16px", fontWeight: "700" }}>🥕 Food Ingredient Movements</h3>
+                </div>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+	                    <tr>
+	                      <th style={thStyle}>Ingredient</th>
+	                      <th style={thStyle}>Type</th>
+	                      <th style={thStyle}>Quantity</th>
+	                      <th style={thStyle}>Unit</th>
+	                      <th style={thStyle}>Cost</th>
+	                      <th style={thStyle}>Notes</th>
+	                      <th style={thStyle}>Date</th>
+	                    </tr>
+	                  </thead>
+	                  <tbody>
+	                    {(!data.ingredientMovements || data.ingredientMovements.length === 0) ? (
+	                      <tr><td colSpan={7} style={{ ...tdStyle, textAlign: "center", color: "#888" }}>No ingredient movements in this period</td></tr>
+	                    ) : data.ingredientMovements.map((m, i) => (
+	                      <tr key={i} {...hoverRow}>
+                        <td style={{ ...tdStyle, fontWeight: "600" }}>{m.ingredientName}</td>
+                        <td style={tdStyle}>
+                          <span style={{
+                            background: m.movement_type === "IN" ? "#e8f5e9" : "#fff8e1",
+                            color: m.movement_type === "IN" ? "#2e7d32" : "#b45309",
+                            border: `1px solid ${m.movement_type === "IN" ? "#c8e6c9" : "#fde68a"}`,
+                            padding: "2px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600",
+                          }}>
+                            {m.movement_type === "IN" ? "Stock In" : "Kitchen Release"}
+                          </span>
+                        </td>
+	                        <td style={{ ...tdStyle, fontWeight: "600", color: m.movement_type === "IN" ? "#2e7d32" : "#b45309" }}>
+	                          {m.movement_type === "IN" ? "+" : "-"}{Number(m.quantity).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+	                        </td>
+	                        <td style={tdStyle}>{m.unit || "—"}</td>
+	                        <td style={tdStyle}>
+	                          {m.movement_type === "IN" && Number(m.totalCost || 0) > 0 ? formatMoney(m.totalCost) : "—"}
+	                        </td>
+	                        <td style={{ ...tdStyle, color: "#6b6b6b", fontSize: "13px" }}>{m.notes || "—"}</td>
+	                        <td style={{ ...tdStyle, color: "#6b6b6b", fontSize: "13px" }}>{new Date(m.created_at).toLocaleString()}</td>
+	                      </tr>
                     ))}
                   </tbody>
                 </table>

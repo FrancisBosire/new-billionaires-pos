@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { FaReceipt, FaChevronRight, FaChevronLeft } from "react-icons/fa";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
@@ -62,7 +62,7 @@ export default function SalesHistory({ currentUser, isMySales = false }) {
     }
   };
 
-  const loadSales = async (range = getQuickRange(quickFilter)) => {
+  const loadSales = useCallback(async (range = getQuickRange(quickFilter)) => {
     try {
       setLoading(true);
       setErrorMessage("");
@@ -81,7 +81,7 @@ export default function SalesHistory({ currentUser, isMySales = false }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentUser, isMySales, quickFilter]);
 
   const fetchSaleItems = async (sale) => {
     if (selectedSale?.id === sale.id) {
@@ -103,8 +103,9 @@ export default function SalesHistory({ currentUser, isMySales = false }) {
   // Fixed DRY configuration - uses auth headers via internal wrapper safely
   useEffect(() => {
     const range = getQuickRange(quickFilter);
-    loadSales(range);
-  }, [quickFilter, currentUser?.id, isMySales]);
+    const timer = setTimeout(() => loadSales(range), 0);
+    return () => clearTimeout(timer);
+  }, [quickFilter, loadSales]);
 
   const handleQuickFilter = (key) => {
     setQuickFilter(key);

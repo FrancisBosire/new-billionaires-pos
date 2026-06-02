@@ -61,7 +61,10 @@ export default function Menu() {
   }, []);
 
   // Reset to page 1 when search changes or items are added/removed
-  useEffect(() => { setCurrentPage(1); }, [search, items.length]);
+  useEffect(() => {
+    const timer = setTimeout(() => setCurrentPage(1), 0);
+    return () => clearTimeout(timer);
+  }, [search, items.length]);
 
   useEffect(() => {
     if (!successMessage) return;

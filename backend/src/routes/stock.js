@@ -50,7 +50,7 @@ router.get("/history", async (req, res) => {
 
 // RECORD STOCK IN (existing product)
 router.post("/in", async (req, res) => {
-  const { productId, quantity, costPrice } = req.body;
+  const { productId, quantity, costPrice, sellingPrice } = req.body;
 
   if (!productId || !quantity || quantity < 1) {
     return res.status(400).json({ error: "Product and quantity are required." });
@@ -58,14 +58,24 @@ router.post("/in", async (req, res) => {
   if (costPrice === undefined || costPrice === null || costPrice < 0) {
     return res.status(400).json({ error: "Cost price is required." });
   }
+  if (sellingPrice !== undefined && sellingPrice !== null && sellingPrice < 0) {
+    return res.status(400).json({ error: "Selling price cannot be negative." });
+  }
 
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
-    await connection.query(
-      "UPDATE products SET stock_quantity = stock_quantity + ?, cost_price = ? WHERE id = ?",
-      [quantity, costPrice, productId]
-    );
+    if (sellingPrice !== undefined && sellingPrice !== null && sellingPrice !== "") {
+      await connection.query(
+        "UPDATE products SET stock_quantity = stock_quantity + ?, cost_price = ?, selling_price = ? WHERE id = ?",
+        [quantity, costPrice, sellingPrice, productId]
+      );
+    } else {
+      await connection.query(
+        "UPDATE products SET stock_quantity = stock_quantity + ?, cost_price = ? WHERE id = ?",
+        [quantity, costPrice, productId]
+      );
+    }
     await connection.query(
       "INSERT INTO stock_movements (product_id, type, quantity, cost_price) VALUES (?, 'IN', ?, ?)",
       [productId, quantity, costPrice]

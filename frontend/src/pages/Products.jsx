@@ -77,7 +77,8 @@ function Products() {
   }, []);
 
   useEffect(() => {
-    setCurrentPage(1);
+    const timer = setTimeout(() => setCurrentPage(1), 0);
+    return () => clearTimeout(timer);
   }, [searchTerm, products.length]);
 
   const resetForm = () => {

@@ -1,51 +1,54 @@
 # NEXT STEPS
 
 ## Current Focus
-Build the admin/cashier app structure and shared POS sales screen.
 
-## Recommended Build Order
+Prepare the system for real business use, handover, and deployment.
 
-### Step 1: Edit Product
-Add an Actions column to the Products table and allow existing products to be edited using the current form.
+## Recommended Order
 
-### Step 2: Search and Filter
-Add a search input for product names and category filtering so products can be found quickly.
+### Step 1: Database Setup File
 
-### Step 3: Better Styling
-Improve spacing, table layout, buttons, form design, and empty states while keeping inline styles for now.
+Create one complete SQL setup file for a new installation. It should include all required tables, columns, indexes, and sample first-user instructions.
 
-### Step 4: Backend API
-Create a Node.js and Express backend with product CRUD endpoints.
+### Step 2: Production Environment
 
-Status: Completed with an in-memory products API.
+Set production environment variables:
 
-### Step 5: MySQL Connection
-Connect the backend to MySQL and store products in the database instead of React state only.
+- `DB_HOST`
+- `DB_PORT`
+- `DB_USER`
+- `DB_PASSWORD`
+- `DB_NAME`
+- `JWT_SECRET`
+- `VITE_API_URL`
 
-Status: Completed for products.
+Use a strong `JWT_SECRET`.
 
-### Step 6: POS Cart
-Build the sales screen where products can be added to a cart, quantities changed, and totals calculated.
+### Step 3: Backups
 
-Status: Frontend cart completed. Checkout still needs backend/MySQL saving.
+Set up regular MySQL backups before the system is used for daily operations.
 
-Checkout update: Completed initial backend/MySQL checkout saving.
+### Step 4: Testing
 
-### Step 7: Authentication
-Add login, JWT authentication, protected routes, and basic user roles.
+Add tests for the most important workflows:
 
-### Step 8: Reports and Analytics
-Create sales summaries, product performance reports, and dashboard metrics.
+- Login.
+- New sale.
+- Stock deduction.
+- Product stock-in.
+- Ingredient stock-in.
+- Ingredient kitchen release.
+- Reports date filters.
+- User permissions.
 
-Polish status: Sales History now has date filters and receipt-style details. Reports UI polish is next.
+### Step 5: Historical Profit Accuracy
 
-### Step 9: Responsive Mobile UI
-Make the dashboard, products table, forms, and POS cart usable on mobile screens.
+For stricter accounting, store product cost price on each sale item at checkout time. Reports currently calculate bar profit using the current product cost price.
 
-Status: Initial responsive layout pass completed and ready for device testing.
+### Step 6: Deployment
 
-### Step 10: Deployment
-Deploy the frontend, backend, and database, then update the README with live links and setup instructions.
+Deploy frontend, backend, and database. After deployment, update `README.md` with live URLs and final setup notes.
 
 ## Long-Term Goal
-Build a professional full-stack POS and inventory management platform suitable for restaurants, bars, and retail businesses.
+
+Turn the project into a reliable daily POS and inventory platform for sales, stock control, staff accountability, and management reporting.

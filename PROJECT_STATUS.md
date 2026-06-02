@@ -1,80 +1,85 @@
-# NEW BILLIONAIRES POS SYSTEM
+# New Billionaires POS System
+
 ## Project Status
 
-### Tech Stack
-- React (Frontend)
-- Vite
-- React Router DOM
-- MySQL
-- Node.js backend (planned)
+The system is now a working full-stack POS and stock management application. It includes login, role-based navigation, sales, inventory, menu, ingredient stock, users, and reports.
 
----
+## Tech Stack
 
-## Completed Features
+- React and Vite frontend.
+- React Router DOM for navigation.
+- Node.js and Express backend.
+- MySQL database.
+- JWT authentication.
+- bcrypt password hashing.
 
-### Frontend Setup
-- Vite initialized
-- React app running
-- Routing configured
-- Sidebar component created
-- Header component created
-- Dashboard page created
-- Products page created
+## Completed Modules
 
----
+### Authentication and Users
 
-## Products System
-### Completed
-- Products table rendering
-- Dynamic product list using React state
-- Add Product button
-- Toggle form visibility using useState
-- Controlled form inputs
-- Add product dynamically to table
-- Edit existing products
-- Delete products
-- Search products by name
-- Improved Products page styling
-- Backend API setup with Express
-- Product CRUD endpoints
-- MySQL connection for products
-- Shared Sales/POS page skeleton
-- Temporary role-aware sidebar and header
-- Frontend POS cart with product selection, quantity controls, totals, and payment method
-- Checkout API saves sales and sale items to MySQL
-- Checkout deducts product stock
-- Checkout records stock movements
-- Sales history page with date filters
-- Receipt-style sales detail panel
-- Responsive layout pass for app shell, sidebar, tables, forms, POS cart, reports, users, stock, and login
+- Login with token-based sessions.
+- Protected API routes.
+- Admin and cashier role handling.
+- User management for admin roles.
+- Sudo-admin-only registration endpoint.
 
----
+### POS Sales
 
-## Current UI Structure
-- Sidebar navigation
-- Header
-- Dashboard page
-- Products page
-- Reports page
-- Sales page
+- Cashier sales screen.
+- Bar product sales with stock checking.
+- Food menu item sales.
+- Cash and M-Pesa payment methods.
+- Sale saving to MySQL.
+- Receipt-style sales detail view.
 
----
+### Stock and Inventory
 
-## Current Milestone
-Building the admin/cashier structure before POS cart integration.
+- Product/drink stock management.
+- Product cost price and selling price management.
+- Product stock-in movement records.
+- Product stock-out records after checkout.
+- Food ingredient stock management.
+- Ingredient stock-in records.
+- Ingredient kitchen-release records.
+- Low-stock visibility for products and ingredients.
 
----
+### Reports
 
-## Next Planned Features In Order
-- Reports UI polish
-- Authentication system
-- Full role-based access control
-- Reports/analytics
-- Responsive mobile UI
-- Deployment
+- Total revenue, orders, average sale, and today's revenue.
+- Payment method breakdown.
+- Bar and food revenue breakdown.
+- Top products and foods by quantity and revenue.
+- Bar gross profit and margin.
+- Cashier performance.
+- Daily, hourly, and monthly trends.
+- Product stock movements.
+- Ingredient stock movements.
 
----
+### UI
 
-## Current Challenges
-- Learning React state management
-- Authentication not yet connected
+- Dashboard.
+- Sidebar and header.
+- POS page.
+- Sales history.
+- Products page.
+- Stock management page.
+- Food menu page.
+- Reports page.
+- Users page.
+- Responsive layout improvements.
+
+## Latest Review
+
+The full project was reviewed and the following checks now pass:
+
+- `npm run lint` in `frontend/`.
+- `npm run build` in `frontend/`.
+- Backend syntax checks for all files in `backend/src`.
+
+## Remaining Technical Work
+
+- Add a full database schema setup/export file.
+- Add automated tests.
+- Add production deployment guide.
+- Add database backup process.
+- Store sale-time cost prices for stricter historical profit reporting.

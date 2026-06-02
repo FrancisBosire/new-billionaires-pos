@@ -3,6 +3,7 @@ import express from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import db from "../config/db.js";
+import { authorizeRoles, verifyToken } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || "your_super_secret_jwt_key";
@@ -10,7 +11,7 @@ const JWT_SECRET = process.env.JWT_SECRET || "your_super_secret_jwt_key";
 // ==========================================
 // 1. USER REGISTRATION (Sudo Admin only)
 // ==========================================
-router.post("/register", async (req, res) => {
+router.post("/register", verifyToken, authorizeRoles("sudo_admin"), async (req, res) => {
   const { name, email, password, role } = req.body;
 
   if (!name || !email || !password || !role) {

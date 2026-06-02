@@ -5,19 +5,20 @@ import db from "../config/db.js";
 
 const router = express.Router();
 
-const getDateRange = (from, to) => {
-  const start =
-    from ||
-    new Date(
-      new Date().getFullYear(),
-      new Date().getMonth(),
-      1
-    )
-      .toISOString()
-      .split("T")[0];
+const formatLocalDate = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
 
-  const end =
-    to || new Date().toISOString().split("T")[0];
+  return `${year}-${month}-${day}`;
+};
+
+const getDateRange = (from, to) => {
+  const now = new Date();
+  const start =
+    from || formatLocalDate(new Date(now.getFullYear(), now.getMonth(), 1));
+
+  const end = to || formatLocalDate(now);
 
   return { start, end };
 };
@@ -427,7 +428,7 @@ router.get("/", async (req, res) => {
     );
 
     // ======================================================
-    // 12. LOW STOCK
+    // 12. LOW STOCK (DRINKS/PRODUCTS)
     // ======================================================
 
     const [lowStock] = await db.query(
@@ -448,7 +449,7 @@ router.get("/", async (req, res) => {
     );
 
     // ======================================================
-    // 13. STOCK MOVEMENTS
+    // 13. STOCK MOVEMENTS (DRINKS/PRODUCTS)
     // ======================================================
 
     const [stockMovements] = await db.query(
@@ -501,16 +502,100 @@ router.get("/", async (req, res) => {
     );
 
     // ======================================================
+    // 15. FOOD INGREDIENTS - CURRENT STOCK
+    // ======================================================
+
+    const [ingredientStock] = await db.query(
+      `
+      SELECT
+        id,
+        name,
+        default_unit,
+        current_quantity,
+        minimum_quantity,
+        average_cost,
+        notes
+
+      FROM food_ingredients
+
+      WHERE is_active = 1
+
+      ORDER BY name ASC
+      `
+    );
+
+    // ======================================================
+    // 16. FOOD INGREDIENTS - LOW STOCK
+    // ======================================================
+
+    const [ingredientLowStock] = await db.query(
+      `
+      SELECT
+        name,
+        default_unit,
+        current_quantity,
+        minimum_quantity
+
+      FROM food_ingredients
+
+      WHERE current_quantity <= minimum_quantity
+      AND is_active = 1
+
+      ORDER BY current_quantity ASC
+      `
+    );
+
+    // ======================================================
+    // 17. FOOD INGREDIENTS - MOVEMENTS
+    // ======================================================
+
+    const [ingredientMovements] = await db.query(
+      `
+      SELECT
+        fsm.id,
+        fi.name AS ingredientName,
+        fsm.movement_type,
+        fsm.quantity,
+        fsm.unit,
+        fsm.cost_per_unit AS costPerUnit,
+        fsm.total_cost AS totalCost,
+        fsm.notes,
+        fsm.created_at
+
+      FROM food_stock_movements fsm
+
+      INNER JOIN food_ingredients fi
+        ON fsm.ingredient_id = fi.id
+
+      WHERE DATE(fsm.created_at) BETWEEN ? AND ?
+
+      ORDER BY fsm.created_at DESC
+
+      LIMIT 30
+      `,
+      [start, end]
+    );
+
+    // ======================================================
     // RESPONSE
     // ======================================================
 
-    res.json({
-      dateRange: {
-        start,
-        end,
-      },
+    const revenueByType = itemTypeBreakdown.reduce((totals, item) => {
+      totals[item.type] = Number(item.totalRevenue || 0);
+      return totals;
+    }, {});
 
-      overview: overview[0],
+    const foodRevenue = revenueByType.food || 0;
+    const barRevenue = revenueByType.bar || 0;
+
+    res.json({
+      dateRange: { start, end },
+
+      overview: {
+        ...overview[0],
+        barRevenue,
+        foodRevenue,
+      },
 
       paymentBreakdown,
 
@@ -531,8 +616,11 @@ router.get("/", async (req, res) => {
       monthlyTrend,
 
       lowStock,
-
       stockMovements,
+
+      ingredientStock,
+      ingredientLowStock,
+      ingredientMovements,
     });
 
   } catch (err) {

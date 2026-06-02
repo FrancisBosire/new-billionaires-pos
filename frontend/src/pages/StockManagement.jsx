@@ -6,6 +6,12 @@ const API_BASE_URL = import.meta.env.VITE_API_URL;
 const STOCK_URL = `${API_BASE_URL}/stock`;
 const ITEMS_PER_PAGE = 20;
 
+// ── CATEGORY SUGGESTIONS (Dropdown + Free Typing) ────────────
+const CATEGORY_SUGGESTIONS = [
+  "Beer", "Whiskey", "Brandy", "Spirit", "Wine", "Softdrinks", 
+  "Cocktails", "Juices", "Water", "Energy Drinks"
+];
+
 const getAuthHeaders = () => ({
   "Content-Type": "application/json",
   Authorization: `Bearer ${sessionStorage.getItem("token")}`,
@@ -26,7 +32,7 @@ const iconBtnStyle = { border: "none", borderRadius: "6px", cursor: "pointer", w
 const primaryBtn = { padding: "10px 20px", background: "#1a1a2e", color: "#c9a84c", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "600", fontSize: "14px" };
 const secondaryBtn = { padding: "10px 20px", background: "#eef1f5", color: "#1a1a2e", border: "1px solid #d0cdc6", borderRadius: "8px", cursor: "pointer", fontWeight: "600", fontSize: "14px" };
 
-// ── SUMMARY CARD ──────────────────────────────────────────────
+// ─ SUMMARY CARD ──────────────────────────────────────────────
 function SummaryCard({ label, value, color, bg, border, icon }) {
   const [hovered, setHovered] = useState(false);
   return (
@@ -122,7 +128,19 @@ function EditProductModal({ product, onSave, onClose }) {
           </div>
           <div>
             <label style={labelStyle}>Category</label>
-            <input type="text" value={editCategory} onChange={(e) => setEditCategory(e.target.value)} placeholder="e.g. Beer, Food" style={inputStyle} />
+            <input 
+              type="text" 
+              list="edit-category-options"
+              value={editCategory} 
+              onChange={(e) => setEditCategory(e.target.value)} 
+              placeholder="e.g. Beer, Food" 
+              style={inputStyle} 
+            />
+            <datalist id="edit-category-options">
+              {CATEGORY_SUGGESTIONS.map((cat) => (
+                <option key={cat} value={cat} />
+              ))}
+            </datalist>
           </div>
           <div>
             <label style={labelStyle}>Min Stock Level</label>
@@ -146,7 +164,7 @@ function EditProductModal({ product, onSave, onClose }) {
   );
 }
 
-// ── SEARCHABLE PRODUCT DROPDOWN ──────────────────────────────
+// ── SEARCHABLE PRODUCT DROPDOWN ─────────────────────────────
 function ProductSearch({ products, value, onChange }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -234,12 +252,16 @@ export default function StockManagement() {
   const [productId, setProductId] = useState(null);
   const [quantity, setQuantity] = useState("");
   const [costPrice, setCostPrice] = useState("");
+  const [sellingPrice, setSellingPrice] = useState("");
+  
+  // New product form
   const [newName, setNewName] = useState("");
   const [newCategory, setNewCategory] = useState("");
   const [newSellingPrice, setNewSellingPrice] = useState("");
   const [newCostPrice, setNewCostPrice] = useState("");
   const [newQuantity, setNewQuantity] = useState("");
   const [newMinStock, setNewMinStock] = useState("5");
+  
   const [from, setFrom] = useState(defaultRange.monthStart);
   const [to, setTo] = useState(defaultRange.today);
 
@@ -254,7 +276,7 @@ export default function StockManagement() {
 
   const fetchHistory = async () => {
     setHistoryLoading(true);
-    setHistoryPage(1); // Reset to page 1 when filtering
+    setHistoryPage(1);
     try {
       const res = await fetch(`${STOCK_URL}/history?from=${from}&to=${to}`, { headers: getAuthHeaders() });
       const data = await res.json();
@@ -298,20 +320,31 @@ export default function StockManagement() {
     return () => clearTimeout(t);
   }, [errorMessage]);
 
-  // Reset products page when search changes
-  useEffect(() => { setProductsPage(1); }, [stockSearch]);
-  // Reset history page when date filters change
-  useEffect(() => { setHistoryPage(1); }, [from, to]);
+  useEffect(() => {
+    const timer = setTimeout(() => setProductsPage(1), 0);
+    return () => clearTimeout(timer);
+  }, [stockSearch]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setHistoryPage(1), 0);
+    return () => clearTimeout(timer);
+  }, [from, to]);
 
   const handleProductSelect = (id) => {
     setProductId(id);
     const p = products.find((p) => p.id === id);
-    if (p && p.cost_price > 0) setCostPrice(p.cost_price);
-    else setCostPrice("");
+    if (p) {
+      if (p.cost_price > 0) setCostPrice(p.cost_price);
+      else setCostPrice("");
+      setSellingPrice(p.selling_price || "");
+    } else {
+      setCostPrice("");
+      setSellingPrice("");
+    }
   };
 
   const resetForm = () => {
-    setProductId(null); setQuantity(""); setCostPrice("");
+    setProductId(null); setQuantity(""); setCostPrice(""); setSellingPrice("");
     setNewName(""); setNewCategory(""); setNewSellingPrice("");
     setNewCostPrice(""); setNewQuantity(""); setNewMinStock("5");
   };
@@ -319,9 +352,13 @@ export default function StockManagement() {
   const handleStockIn = async () => {
     if (!productId || !quantity || costPrice === "") { setErrorMessage("All fields are required."); return; }
     try {
+      const payload = { productId, quantity: Number(quantity), costPrice: Number(costPrice) };
+      if (sellingPrice && sellingPrice !== "") {
+        payload.sellingPrice = Number(sellingPrice);
+      }
       const res = await fetch(`${STOCK_URL}/in`, {
         method: "POST", headers: getAuthHeaders(),
-        body: JSON.stringify({ productId, quantity: Number(quantity), costPrice: Number(costPrice) }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -374,7 +411,6 @@ export default function StockManagement() {
   const selectedProduct = products.find((p) => p.id === productId);
   const totalCostThisPeriod = history.reduce((s, h) => s + Number(h.totalCost || 0), 0);
   
-  // Filter & paginate products
   const filteredProducts = products.filter((p) =>
     p.name.toLowerCase().includes(stockSearch.toLowerCase()) ||
     (p.category || "").toLowerCase().includes(stockSearch.toLowerCase())
@@ -383,8 +419,6 @@ export default function StockManagement() {
     (productsPage - 1) * ITEMS_PER_PAGE,
     productsPage * ITEMS_PER_PAGE
   );
-
-  // Paginate history (no search, just date filtering)
   const paginatedHistory = history.slice(
     (historyPage - 1) * ITEMS_PER_PAGE,
     historyPage * ITEMS_PER_PAGE
@@ -397,7 +431,6 @@ export default function StockManagement() {
   return (
     <div className="page-shell stock-page" style={{ fontFamily: "'Segoe UI', sans-serif", color: "#1a1a2e" }}>
 
-      {/* EDIT PRODUCT MODAL */}
       {editingProduct && (
         <EditProductModal
           product={editingProduct}
@@ -423,7 +456,7 @@ export default function StockManagement() {
       {/* TAB SWITCHER */}
       <div style={{ display: "flex", gap: "4px", marginBottom: "24px", background: "#f5f3ee", padding: "4px", borderRadius: "10px", width: "fit-content", border: "1px solid #e0ddd5" }}>
         {[
-          { key: "products", label: "🍺 Drinks" },
+          { key: "products", label: " Products & Drinks" },
           { key: "ingredients", label: "🥕 Food Ingredients" },
         ].map((tab) => (
           <button key={tab.key} onClick={() => { setActiveTab(tab.key); setShowForm(false); setEditingProduct(null); resetForm(); }}
@@ -433,12 +466,11 @@ export default function StockManagement() {
         ))}
       </div>
 
-      {/* ── PRODUCTS TAB ── */}
       {activeTab === "products" && (
         <>
           {/* SUMMARY CARDS */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "14px", marginBottom: "24px" }}>
-            <SummaryCard label="Total Products" value={products.length} color="#1a1a2e" bg="#f5f3ee" icon="🍺" />
+            <SummaryCard label="Total Products" value={products.length} color="#1a1a2e" bg="#f5f3ee" icon="" />
             <SummaryCard label="Low Stock" value={lowStockCount} color="#d97706" bg="#fff8e1" border="#fde68a" icon={<FaExclamationTriangle size={14} style={{ color: "#d97706" }} />} />
             <SummaryCard label="Out of Stock" value={outOfStockCount} color="#dc2626" bg="#fef2f2" border="#fecaca" icon={<FaTimesCircle size={14} style={{ color: "#dc2626" }} />} />
             <SummaryCard label="Stock Value" value={formatMoney(totalStockValue)} color="#2e7d32" bg="#e8f5e9" border="#c8e6c9" icon="💰" />
@@ -466,6 +498,7 @@ export default function StockManagement() {
                     <div><label style={labelStyle}>Product</label><ProductSearch products={products} value={productId} onChange={handleProductSelect} /></div>
                     <div><label style={labelStyle}>Quantity Received</label><input type="number" min="1" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="e.g. 24" style={inputStyle} /></div>
                     <div><label style={labelStyle}>Cost Price per Unit (KES)</label><input type="number" min="0" step="0.01" value={costPrice} onChange={(e) => setCostPrice(e.target.value)} placeholder="e.g. 150" style={inputStyle} /></div>
+                    <div><label style={labelStyle}>Selling Price (KES) <span style={{color:"#9ca3af",fontWeight:"400"}}>(optional update)</span></label><input type="number" min="0" step="0.01" value={sellingPrice} onChange={(e) => setSellingPrice(e.target.value)} placeholder={selectedProduct ? `Current: ${formatMoney(selectedProduct.selling_price)}` : "e.g. 300"} style={inputStyle} /></div>
                   </div>
                   {selectedProduct && quantity && costPrice !== "" && (
                     <div style={{ background: "#f5f3ee", border: "1px solid #e0ddd5", borderRadius: "8px", padding: "14px 18px", marginBottom: "16px", display: "flex", gap: "28px", flexWrap: "wrap" }}>
@@ -474,14 +507,19 @@ export default function StockManagement() {
                         { label: "Adding", value: `+${quantity}`, color: "#2e7d32" },
                         { label: "New Stock", value: Number(selectedProduct.stock_quantity) + Number(quantity), color: "#2e7d32" },
                         { label: "Total Cost", value: formatMoney(Number(quantity) * Number(costPrice)) },
-                        { label: "Selling Price", value: formatMoney(selectedProduct.selling_price) },
-                        { label: "Profit/Unit", value: formatMoney(Number(selectedProduct.selling_price) - Number(costPrice)), color: Number(selectedProduct.selling_price) - Number(costPrice) >= 0 ? "#2e7d32" : "#dc2626" },
+                        { label: "Selling Price", value: sellingPrice ? formatMoney(sellingPrice) : formatMoney(selectedProduct.selling_price), color: sellingPrice && sellingPrice !== selectedProduct.selling_price ? "#b45309" : undefined },
+                        { label: "Profit/Unit", value: formatMoney((sellingPrice || selectedProduct.selling_price) - Number(costPrice)), color: (sellingPrice || selectedProduct.selling_price) - Number(costPrice) >= 0 ? "#2e7d32" : "#dc2626" },
                       ].map((item) => (
                         <div key={item.label}>
                           <p style={{ margin: 0, fontSize: "11px", color: "#6b6b6b", textTransform: "uppercase", letterSpacing: "0.05em" }}>{item.label}</p>
                           <p style={{ margin: 0, fontWeight: "700", fontSize: "15px", color: item.color || "#1a1a2e" }}>{item.value}</p>
                         </div>
                       ))}
+                      {sellingPrice && Number(sellingPrice) < Number(costPrice) && (
+                        <div style={{ width: "100%", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "6px", padding: "8px 12px", fontSize: "13px", color: "#dc2626", fontWeight: "600" }}>
+                          ⚠️ Selling price is lower than cost price — this will result in a loss per unit
+                        </div>
+                      )}
                     </div>
                   )}
                   <div style={{ display: "flex", gap: "10px" }}>
@@ -496,7 +534,25 @@ export default function StockManagement() {
                   <h3 style={{ margin: "0 0 16px", fontSize: "16px", fontWeight: "700" }}>Add New Product + Initial Stock</h3>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", marginBottom: "16px" }}>
                     <div><label style={labelStyle}>Product Name *</label><input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Heineken" style={inputStyle} /></div>
-                    <div><label style={labelStyle}>Category</label><input type="text" value={newCategory} onChange={(e) => setNewCategory(e.target.value)} placeholder="e.g. Beer, Spirits, Food" style={inputStyle} /></div>
+                    
+                    {/* Category Dropdown */}
+                    <div>
+                      <label style={labelStyle}>Category</label>
+                      <input 
+                        type="text" 
+                        list="new-category-options"
+                        value={newCategory} 
+                        onChange={(e) => setNewCategory(e.target.value)} 
+                        placeholder="e.g. Beer, Spirits" 
+                        style={inputStyle} 
+                      />
+                      <datalist id="new-category-options">
+                        {CATEGORY_SUGGESTIONS.map((cat) => (
+                          <option key={cat} value={cat} />
+                        ))}
+                      </datalist>
+                    </div>
+                    
                     <div><label style={labelStyle}>Minimum Stock Level</label><input type="number" min="0" value={newMinStock} onChange={(e) => setNewMinStock(e.target.value)} placeholder="5" style={inputStyle} /></div>
                     <div><label style={labelStyle}>Selling Price (KES) *</label><input type="number" min="0" step="0.01" value={newSellingPrice} onChange={(e) => setNewSellingPrice(e.target.value)} placeholder="e.g. 300" style={inputStyle} /></div>
                     <div><label style={labelStyle}>Cost Price per Unit (KES)</label><input type="number" min="0" step="0.01" value={newCostPrice} onChange={(e) => setNewCostPrice(e.target.value)} placeholder="e.g. 180" style={inputStyle} /></div>
@@ -652,7 +708,6 @@ export default function StockManagement() {
         </>
       )}
 
-      {/* ── INGREDIENTS TAB ── */}
       {activeTab === "ingredients" && <IngredientStock />}
     </div>
   );

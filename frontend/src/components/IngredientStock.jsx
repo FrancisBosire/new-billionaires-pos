@@ -299,8 +299,15 @@ export default function IngredientStock() {
   }, [errorMessage]);
 
   // Reset pages when filters change
-  useEffect(() => { setIngredientsPage(1); }, [search]);
-  useEffect(() => { setHistoryPage(1); }, [from, to]);
+  useEffect(() => {
+    const timer = setTimeout(() => setIngredientsPage(1), 0);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setHistoryPage(1), 0);
+    return () => clearTimeout(timer);
+  }, [from, to]);
 
   // ── HELPERS ──────────────────────────────────────────────
   const closeAllForms = () => {
