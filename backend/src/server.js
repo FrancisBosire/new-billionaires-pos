@@ -30,11 +30,11 @@ app.use("/api/auth", authRoutes);
 // BOTH admins and cashiers can fetch products or process checkouts
 app.use("/api/products", verifyToken, productRoutes);
 app.use("/api/sales", verifyToken, saleRoutes);
-app.use("/api/reports", verifyToken, authorizeRoles("sudo_admin", "admin"), reportRoutes);
-app.use("/api/stock", verifyToken, authorizeRoles("sudo_admin", "admin"), stockRoutes);
-app.use("/api/ingredient-stock", verifyToken, authorizeRoles("sudo_admin", "admin"), ingredientStockRoutes); // Protect ingredient stock routes
-app.use("/api/users", verifyToken, authorizeRoles("sudo_admin", "admin"), userRoutes);
-app.use("/api/menu", verifyToken, menuRoutes);
+app.use("/api/reports", verifyToken, authorizeRoles("owner", "sudo_admin", "admin"), reportRoutes);
+app.use("/api/stock", verifyToken, authorizeRoles("owner", "sudo_admin", "admin"), stockRoutes);
+app.use("/api/ingredient-stock", verifyToken, authorizeRoles("owner", "sudo_admin", "admin"), ingredientStockRoutes); // Protect ingredient stock routes
+app.use("/api/users", verifyToken, authorizeRoles("owner", "sudo_admin", "admin"), userRoutes);
+app.use("/api/menu", verifyToken, authorizeRoles("owner", "sudo_admin", "admin"), menuRoutes);
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });

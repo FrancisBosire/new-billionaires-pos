@@ -30,10 +30,12 @@ function Sidebar({ currentUser }) {
   ];
 
   const menuItems =
-    currentUser.role === "sudo_admin" || currentUser.role === "admin"
-      ? adminMenuItems
-      : cashierMenuItems;
-
+  currentUser.role === "owner" || 
+  currentUser.role === "sudo_admin" || 
+  currentUser.role === "admin"
+    ? adminMenuItems
+    : cashierMenuItems;
+    
   const formatRole = (role) =>
     role.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 

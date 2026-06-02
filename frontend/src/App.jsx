@@ -41,11 +41,13 @@ function App() {
     return <Login onLogin={handleLogin} />;
   }
 
+
   const isCashier = user.role === "cashier";
 
-  const isAdmin =
-    user.role === "sudo_admin" ||
-    user.role === "admin";
+const isAdmin =
+  user.role === "owner" ||
+  user.role === "sudo_admin" ||
+  user.role === "admin";
 
   return (
     <BrowserRouter>

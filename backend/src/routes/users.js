@@ -8,8 +8,14 @@ const router = express.Router();
 // GET ALL USERS
 router.get("/", async (req, res) => {
   try {
+    // 🔒 Hide 'owner' role from sudo_admin and Admin (but owner sees everyone)
+    const hideOwner = req.user?.role !== "owner" ? "AND role != 'owner'" : "";
+    
     const [users] = await db.query(
-      "SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC"
+      `SELECT id, name, email, role, created_at 
+       FROM users 
+       WHERE 1=1 ${hideOwner}
+       ORDER BY created_at DESC`
     );
     res.json(users);
   } catch (err) {
@@ -25,12 +31,17 @@ router.post("/", async (req, res) => {
     return res.status(400).json({ error: "All fields are required." });
   }
 
-  const validRoles = ["sudo_admin", "admin", "cashier"];
+  // 🔑 Owner can create ANY role; others are restricted
+  const validRoles = req.user?.role === "owner" 
+    ? ["owner", "sudo_admin", "admin", "cashier"] 
+    : ["sudo_admin", "admin", "cashier"];
+    
   if (!validRoles.includes(role)) {
     return res.status(400).json({ error: "Invalid role." });
   }
 
-  if (req.user.role === "admin" && role !== "cashier") {
+  // 🔑 Admins can only create cashiers (unless owner is creating)
+  if (req.user.role === "admin" && role !== "cashier" && req.user.role !== "owner") {
     return res.status(403).json({ error: "Admins can only create cashier accounts." });
   }
 
@@ -54,8 +65,16 @@ router.put("/:id", async (req, res) => {
   const { name, email, password, role } = req.body;
   const { id } = req.params;
 
-  if (req.user.role === "admin" && role !== "cashier") {
-    return res.status(403).json({ error: "Admins can only edit cashier accounts." });
+  // 🔑 Owner can promote to ANY role; others are restricted
+  if (role && req.user.role !== "owner") {
+    const allowedPromotions = {
+      "sudo_admin": ["admin", "cashier"], // sudo_admin can only demote or keep same
+      "admin": ["cashier"], // admin can only set cashier
+    };
+    const userAllowed = allowedPromotions[req.user.role] || [];
+    if (!userAllowed.includes(role) && role !== req.user.role) {
+      return res.status(403).json({ error: "You cannot assign this role." });
+    }
   }
 
   try {
