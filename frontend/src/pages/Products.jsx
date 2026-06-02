@@ -4,6 +4,20 @@ import { FaTrash, FaEdit, FaTimes } from "react-icons/fa";
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 const PRODUCTS_API_URL = `${API_BASE_URL}/products`;
 
+// Predefined category suggestions (drinks-focused)
+const CATEGORY_SUGGESTIONS = [
+  "Whiskey",
+  "Spirit",
+  "Wine",
+  "Softdrinks",
+  "Brandy",
+  "Beer",
+  "Cocktails",
+  "Juices",
+  "Water",
+  "Energy Drinks"
+];
+
 const getHeaders = () => ({
   "Content-Type": "application/json",
   Authorization: `Bearer ${sessionStorage.getItem("token")}`,
@@ -11,17 +25,13 @@ const getHeaders = () => ({
 
 function Products() {
   const [showForm, setShowForm] = useState(false);
-
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
   const [stock, setStock] = useState("");
   const [price, setPrice] = useState("");
-
   const [editingId, setEditingId] = useState(null);
-  const [showEditModal, setShowEditModal] = useState(false); // New: Edit overlay state
-
+  const [showEditModal, setShowEditModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-
   const [products, setProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
@@ -66,7 +76,6 @@ function Products() {
     return () => { isActive = false; };
   }, []);
 
-  // Reset to page 1 when search term or product list changes
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, products.length]);
@@ -105,7 +114,7 @@ function Products() {
     setStock(product.stock);
     setPrice(product.price);
     setEditingId(product.id);
-    setShowEditModal(true); // Open modal instead of inline form
+    setShowEditModal(true);
   };
 
   const handleDeleteProduct = async (id) => {
@@ -141,7 +150,7 @@ function Products() {
       }
       await fetchProducts();
       resetForm();
-      setShowEditModal(false); // Close modal on success
+      setShowEditModal(false);
     } catch (error) {
       setErrorMessage(error.message);
     }
@@ -204,7 +213,24 @@ function Products() {
           <h3 style={sectionTitleStyle}>New Product Form</h3>
           <div className="responsive-form-grid" style={formGridStyle}>
             <input type="text" placeholder="Product Name" style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} />
-            <input type="text" placeholder="Category" style={inputStyle} value={category} onChange={(e) => setCategory(e.target.value)} />
+            
+            {/* Category Input with Datalist */}
+            <div style={{ position: "relative" }}>
+              <input
+                type="text"
+                list="category-suggestions"
+                placeholder="Category (e.g. Beer, Wine)"
+                style={inputStyle}
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              />
+              <datalist id="category-suggestions">
+                {CATEGORY_SUGGESTIONS.map((cat) => (
+                  <option key={cat} value={cat} />
+                ))}
+              </datalist>
+            </div>
+            
             <input type="number" placeholder="Stock Quantity" style={inputStyle} value={stock} onChange={(e) => setStock(e.target.value)} />
             <input type="number" placeholder="Price" style={inputStyle} value={price} onChange={(e) => setPrice(e.target.value)} />
           </div>
@@ -294,7 +320,24 @@ function Products() {
             <h3 style={sectionTitleStyle}>Edit Product</h3>
             <div className="responsive-form-grid" style={formGridStyle}>
               <input type="text" placeholder="Product Name" style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} />
-              <input type="text" placeholder="Category" style={inputStyle} value={category} onChange={(e) => setCategory(e.target.value)} />
+              
+              {/* Category Input with Datalist (Edit Modal) */}
+              <div style={{ position: "relative" }}>
+                <input
+                  type="text"
+                  list="category-suggestions"
+                  placeholder="Category (e.g. Beer, Wine)"
+                  style={inputStyle}
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                />
+                <datalist id="category-suggestions">
+                  {CATEGORY_SUGGESTIONS.map((cat) => (
+                    <option key={cat} value={cat} />
+                  ))}
+                </datalist>
+              </div>
+              
               <input type="number" placeholder="Stock Quantity" style={inputStyle} value={stock} onChange={(e) => setStock(e.target.value)} />
               <input type="number" placeholder="Price" style={inputStyle} value={price} onChange={(e) => setPrice(e.target.value)} />
             </div>
@@ -334,11 +377,8 @@ const iconButtonStyle = { background: "#1f2a36", color: "white", border: "none",
 const dangerButtonStyle = { ...iconButtonStyle, background: "#dc2626" };
 const emptyStateStyle = { padding: "28px", textAlign: "center", color: "#6b7280" };
 const inputStyle = { width: "100%", padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: "6px", outline: "none" };
-
-// New Styles for Pagination & Modal
 const paginationStyle = { display: "flex", justifyContent: "center", alignItems: "center", gap: "10px", marginTop: "20px", padding: "16px" };
 const pageButtonStyle = { padding: "10px 14px", background: "#eef1f5", color: "#1f2a36", border: "1px solid #cbd5e1", borderRadius: "6px", fontWeight: "600", cursor: "pointer", transition: "all 0.2s" };
-
 const overlayStyle = {
   position: "fixed",
   top: 0,
