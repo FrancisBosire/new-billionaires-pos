@@ -16,6 +16,7 @@ import Users from "./pages/Users";
 import StockManagement from "./pages/StockManagement";
 import Menu from "./pages/Menu";
 import Login from "./pages/Login";
+import OwnerDashboard from "./pages/OwnerDashboard";
 
 function App() {
 
@@ -174,6 +175,13 @@ const isAdmin =
                   />
                 }
               />
+
+              <Route
+  path="/owner-dashboard"
+  element={
+    user.role === "owner" ? <OwnerDashboard /> : <Navigate to="/" replace />
+  }
+/>
 
               <Route
                 path="*"

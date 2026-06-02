@@ -9,6 +9,7 @@ import {
   FaWarehouse,
   FaHistory,
   FaUtensils,
+  FaDatabase,
 } from "react-icons/fa";
 import logo from "../assets/logo.png";
 
@@ -29,13 +30,22 @@ function Sidebar({ currentUser }) {
     { name: "My Sales",       path: "/my-sales", icon: <FaHistory /> },
   ];
 
-  const menuItems =
+  // Existing admin items
+let menuItems =
   currentUser.role === "owner" || 
   currentUser.role === "sudo_admin" || 
   currentUser.role === "admin"
     ? adminMenuItems
     : cashierMenuItems;
-    
+
+// 🔑 Add Owner-Only Database Link at the BOTTOM if Owner
+if (currentUser.role === "owner") {
+  menuItems = [
+    ...menuItems,
+    { name: "System & Backups", path: "/owner-dashboard", icon: <FaDatabase /> }
+  ];
+}
+
   const formatRole = (role) =>
     role.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 
