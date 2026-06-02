@@ -12,14 +12,44 @@ const getAuthHeaders = () => ({
 
 const roleBadge = (role) => {
   const styles = {
-    sudo_admin: { background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" },
-    admin:      { background: "#e0e7ff", color: "#3730a3", border: "1px solid #c7d2fe" },
-    cashier:    { background: "#e8f5e9", color: "#2e7d32", border: "1px solid #c8e6c9" },
+    owner: { 
+      background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)", 
+      color: "#fff", 
+      border: "1px solid #5b51d8" 
+    },
+    sudo_admin: { 
+      background: "#fef3c7", 
+      color: "#92400e", 
+      border: "1px solid #fde68a" 
+    },
+    admin: { 
+      background: "#e0e7ff", 
+      color: "#3730a3", 
+      border: "1px solid #c7d2fe" 
+    },
+    cashier: { 
+      background: "#e8f5e9", 
+      color: "#2e7d32", 
+      border: "1px solid #c8e6c9" 
+    },
   };
-  const s = styles[role] || {};
-  const label = role.split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+  const s = styles[role] || { 
+    background: "#e5e7eb", 
+    color: "#374151", 
+    border: "1px solid #d1d5db" 
+  };
+  const label = role === "owner" ? "Owner" : 
+                role === "sudo_admin" ? "Sudo Admin" :
+                role.charAt(0).toUpperCase() + role.slice(1);
   return (
-    <span style={{ ...s, padding: "3px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600" }}>
+    <span style={{ 
+      ...s, 
+      padding: "4px 12px", 
+      borderRadius: "20px", 
+      fontSize: "12px", 
+      fontWeight: "600",
+      display: "inline-block",
+    }}>
       {label}
     </span>
   );
@@ -148,10 +178,13 @@ export default function Users({ currentUser }) {
     }
   };
 
-  // Roles available based on current user's role
-  const availableRoles = currentUser.role === "sudo_admin"
-    ? ["sudo_admin", "admin", "cashier"]
-    : ["cashier"];
+ // Roles available based on current user's role
+const availableRoles = 
+  currentUser.role === "owner" 
+    ? ["owner", "sudo_admin", "admin", "cashier"]
+    : currentUser.role === "sudo_admin"
+      ? ["sudo_admin", "admin", "cashier"]
+      : ["cashier"];
 
   return (
     <div className="page-shell users-page" style={pageStyle}>
@@ -230,16 +263,14 @@ export default function Users({ currentUser }) {
             {!isLoading &&
   users
     .filter((user) => {
-      // Hide sudo_admin from normal admins
-      if (
-        currentUser.role !== "sudo_admin" &&
-        user.role === "sudo_admin"
-      ) {
-        return false;
-      }
+  // 🔑 Only Owner and Sudo Admin can see Sudo Admin accounts
+  const canSeeSudoAdmin = currentUser.role === "owner" || currentUser.role === "sudo_admin";
+  if (!canSeeSudoAdmin && user.role === "sudo_admin") {
+    return false;
+  }
+  return true;
+})
 
-      return true;
-    })
     .map((user, index) => (
               <tr
                 key={user.id}
@@ -269,14 +300,12 @@ export default function Users({ currentUser }) {
                     <button onClick={() => handleEdit(user)} style={iconButtonStyle} title="Edit user">
                       <FaEdit />
                     </button>
-                    {/* Sudo admin can delete everyone except themselves */}
-{currentUser.role === "sudo_admin" &&
+
+                    
+                    {/* Owner and Sudo Admin can delete everyone except themselves */}
+{(currentUser.role === "owner" || currentUser.role === "sudo_admin") &&
   user.id !== currentUser.id && (
-    <button
-      onClick={() => handleDelete(user.id)}
-      style={dangerButtonStyle}
-      title="Delete user"
-    >
+    <button onClick={() => handleDelete(user.id)} style={dangerButtonStyle} title="Delete user">
       <FaTrash />
     </button>
 )}
@@ -284,14 +313,11 @@ export default function Users({ currentUser }) {
 {/* Admin can only delete cashiers */}
 {currentUser.role === "admin" &&
   user.role === "cashier" && (
-    <button
-      onClick={() => handleDelete(user.id)}
-      style={dangerButtonStyle}
-      title="Delete user"
-    >
+    <button onClick={() => handleDelete(user.id)} style={dangerButtonStyle} title="Delete user">
       <FaTrash />
     </button>
 )}
+
                   </div>
                 </td>
               </tr>

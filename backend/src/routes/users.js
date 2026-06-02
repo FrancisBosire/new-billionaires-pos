@@ -61,15 +61,21 @@ router.post("/", async (req, res) => {
 });
 
 // UPDATE USER
+// UPDATE USER
 router.put("/:id", async (req, res) => {
   const { name, email, password, role } = req.body;
   const { id } = req.params;
 
+  // 🔒 Prevent modifying own account (safety feature)
+  if (Number(id) === req.user.id) {
+    return res.status(400).json({ error: "You cannot modify your own account. Ask another Owner to make changes." });
+  }
+
   // 🔑 Owner can promote to ANY role; others are restricted
   if (role && req.user.role !== "owner") {
     const allowedPromotions = {
-      "sudo_admin": ["admin", "cashier"], // sudo_admin can only demote or keep same
-      "admin": ["cashier"], // admin can only set cashier
+      "sudo_admin": ["admin", "cashier"],
+      "admin": ["cashier"],
     };
     const userAllowed = allowedPromotions[req.user.role] || [];
     if (!userAllowed.includes(role) && role !== req.user.role) {
@@ -78,20 +84,43 @@ router.put("/:id", async (req, res) => {
   }
 
   try {
-    if (password) {
-      const hashedPassword = await bcrypt.hash(password, 10);
-      await db.query(
-        "UPDATE users SET name=?, email=?, password=?, role=? WHERE id=?",
-        [name, email, hashedPassword, role, id]
-      );
-    } else {
-      await db.query(
-        "UPDATE users SET name=?, email=?, role=? WHERE id=?",
-        [name, email, role, id]
-      );
+    // Build dynamic update query (only update fields that are provided)
+    const updates = [];
+    const values = [];
+
+    if (name !== undefined) {
+      updates.push("name = ?");
+      values.push(name);
     }
+    if (email !== undefined) {
+      updates.push("email = ?");
+      values.push(email);
+    }
+    if (password !== undefined && password !== "") {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      updates.push("password = ?");
+      values.push(hashedPassword);
+    }
+    if (role !== undefined) {
+      updates.push("role = ?");
+      values.push(role);
+    }
+
+    // If nothing to update, return early
+    if (updates.length === 0) {
+      return res.status(400).json({ error: "No fields to update." });
+    }
+
+    values.push(id); // for WHERE clause
+
+    await db.query(
+      `UPDATE users SET ${updates.join(", ")} WHERE id = ?`,
+      values
+    );
+    
     res.json({ message: "User updated successfully." });
   } catch (err) {
+    console.error("Update user error:", err); // Log for debugging
     if (err.code === "ER_DUP_ENTRY") {
       return res.status(400).json({ error: "This email is already registered." });
     }
@@ -103,9 +132,9 @@ router.put("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   const { id } = req.params;
 
-  if (req.user.role !== "sudo_admin") {
-    return res.status(403).json({ error: "Only Sudo Admin can delete users." });
-  }
+if (req.user.role !== "owner" && req.user.role !== "sudo_admin") {
+  return res.status(403).json({ error: "Only Owner and Sudo Admin can delete users." });
+}
 
   if (Number(id) === req.user.id) {
     return res.status(400).json({ error: "You cannot delete your own account." });
