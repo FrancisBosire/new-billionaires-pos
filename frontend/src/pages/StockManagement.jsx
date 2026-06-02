@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, useRef } from "react";
-import { FaPlus, FaBoxOpen, FaSearch, FaEdit, FaTrash } from "react-icons/fa";
+import { FaPlus, FaBoxOpen, FaSearch, FaEdit, FaTrash, FaChevronLeft, FaChevronRight, FaExclamationTriangle, FaTimesCircle, FaTimes } from "react-icons/fa";
 import IngredientStock from "../components/IngredientStock";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 const STOCK_URL = `${API_BASE_URL}/stock`;
+const ITEMS_PER_PAGE = 20;
 
 const getAuthHeaders = () => ({
   "Content-Type": "application/json",
@@ -22,6 +23,128 @@ const tdStyle = { padding: "12px 14px", fontSize: "14px", borderBottom: "1px sol
 const labelStyle = { display: "block", fontSize: "13px", fontWeight: "600", color: "#1a1a2e", marginBottom: "6px" };
 const inputStyle = { width: "100%", padding: "10px 12px", border: "1px solid #d0cdc6", borderRadius: "8px", fontSize: "14px", outline: "none", background: "#faf9f6", boxSizing: "border-box" };
 const iconBtnStyle = { border: "none", borderRadius: "6px", cursor: "pointer", width: "32px", height: "30px", display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" };
+const primaryBtn = { padding: "10px 20px", background: "#1a1a2e", color: "#c9a84c", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "600", fontSize: "14px" };
+const secondaryBtn = { padding: "10px 20px", background: "#eef1f5", color: "#1a1a2e", border: "1px solid #d0cdc6", borderRadius: "8px", cursor: "pointer", fontWeight: "600", fontSize: "14px" };
+
+// ── SUMMARY CARD ──────────────────────────────────────────────
+function SummaryCard({ label, value, color, bg, border, icon }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: hovered ? (bg === "#f5f3ee" ? "#ece9e0" : bg) : bg,
+        border: `1px solid ${hovered ? color : (border || "#e0ddd5")}`,
+        borderRadius: "10px", padding: "16px 18px",
+        transition: "all 0.2s", cursor: "default",
+        transform: hovered ? "translateY(-2px)" : "none",
+        boxShadow: hovered ? "0 4px 12px rgba(0,0,0,0.08)" : "none",
+      }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <p style={{ margin: "0 0 6px", fontSize: "11px", color: "#6b6b6b", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</p>
+        {icon && <span style={{ fontSize: "16px", opacity: 0.7 }}>{icon}</span>}
+      </div>
+      <p style={{ margin: 0, fontSize: "22px", fontWeight: "700", color }}>{value}</p>
+    </div>
+  );
+}
+
+// ── PAGINATION ────────────────────────────────────────────────
+function Pagination({ total, page, perPage, onChange }) {
+  const totalPages = Math.ceil(total / perPage);
+  if (totalPages <= 1) return null;
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 20px", borderTop: "1px solid #e0ddd5", background: "#faf9f6" }}>
+      <span style={{ fontSize: "13px", color: "#6b6b6b" }}>
+        Showing {Math.min((page - 1) * perPage + 1, total)}–{Math.min(page * perPage, total)} of {total}
+      </span>
+      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+        <button onClick={() => onChange(page - 1)} disabled={page === 1}
+          style={{ ...iconBtnStyle, background: page === 1 ? "#f5f3ee" : "#1a1a2e", color: page === 1 ? "#ccc" : "#c9a84c", cursor: page === 1 ? "not-allowed" : "pointer" }}>
+          <FaChevronLeft size={11} />
+        </button>
+        {Array.from({ length: totalPages }, (_, i) => i + 1)
+          .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+          .reduce((acc, p, idx, arr) => {
+            if (idx > 0 && p - arr[idx - 1] > 1) acc.push("...");
+            acc.push(p);
+            return acc;
+          }, [])
+          .map((p, idx) =>
+            p === "..." ? (
+              <span key={`ellipsis-${idx}`} style={{ fontSize: "13px", color: "#9ca3af", padding: "0 4px" }}>…</span>
+            ) : (
+              <button key={p} onClick={() => onChange(p)}
+                style={{ width: "32px", height: "30px", borderRadius: "6px", border: "none", cursor: "pointer", fontWeight: "600", fontSize: "13px", background: p === page ? "#1a1a2e" : "#f5f3ee", color: p === page ? "#c9a84c" : "#4a4a4a" }}>
+                {p}
+              </button>
+            )
+          )}
+        <button onClick={() => onChange(page + 1)} disabled={page === totalPages}
+          style={{ ...iconBtnStyle, background: page === totalPages ? "#f5f3ee" : "#1a1a2e", color: page === totalPages ? "#ccc" : "#c9a84c", cursor: page === totalPages ? "not-allowed" : "pointer" }}>
+          <FaChevronRight size={11} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── EDIT PRODUCT MODAL ────────────────────────────────────────
+function EditProductModal({ product, onSave, onClose }) {
+  const [editName, setEditName] = useState(product.name);
+  const [editCategory, setEditCategory] = useState(product.category || "");
+  const [editSellingPrice, setEditSellingPrice] = useState(product.selling_price);
+  const [editCostPrice, setEditCostPrice] = useState(product.cost_price || "");
+  const [editMinStock, setEditMinStock] = useState(product.minimum_stock);
+  const [error, setError] = useState("");
+
+  const handleSave = () => {
+    if (!editName || !editSellingPrice) { setError("Name and selling price are required."); return; }
+    onSave({ name: editName, category: editCategory, sellingPrice: Number(editSellingPrice), costPrice: Number(editCostPrice || 0), minimumStock: Number(editMinStock || 5) });
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ background: "#fff", borderRadius: "14px", padding: "28px", width: "100%", maxWidth: "580px", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+          <h3 style={{ margin: 0, fontSize: "17px", fontWeight: "700" }}>✏️ Edit Product — {product.name}</h3>
+          <button onClick={onClose} style={{ ...iconBtnStyle, background: "#f5f3ee", color: "#6b6b6b", width: "34px", height: "34px" }}>
+            <FaTimes size={14} />
+          </button>
+        </div>
+        {error && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", borderRadius: "8px", padding: "10px 14px", marginBottom: "16px", fontSize: "13px" }}>{error}</div>}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={labelStyle}>Product Name *</label>
+            <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Category</label>
+            <input type="text" value={editCategory} onChange={(e) => setEditCategory(e.target.value)} placeholder="e.g. Beer, Food" style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Min Stock Level</label>
+            <input type="number" min="0" value={editMinStock} onChange={(e) => setEditMinStock(e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Selling Price (KES) *</label>
+            <input type="number" min="0" step="0.01" value={editSellingPrice} onChange={(e) => setEditSellingPrice(e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Cost Price per Unit (KES)</label>
+            <input type="number" min="0" step="0.01" value={editCostPrice} onChange={(e) => setEditCostPrice(e.target.value)} style={inputStyle} />
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={secondaryBtn}>Cancel</button>
+          <button onClick={handleSave} style={primaryBtn}>Save Changes</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── SEARCHABLE PRODUCT DROPDOWN ──────────────────────────────
 function ProductSearch({ products, value, onChange }) {
@@ -82,6 +205,7 @@ function ProductSearch({ products, value, onChange }) {
   );
 }
 
+// ── MAIN COMPONENT ────────────────────────────────────────────
 export default function StockManagement() {
   const defaultRange = useMemo(() => {
     const now = new Date();
@@ -91,9 +215,7 @@ export default function StockManagement() {
     };
   }, []);
 
-  // ── TAB STATE ──
-  const [activeTab, setActiveTab] = useState("products"); // "products" | "ingredients"
-
+  const [activeTab, setActiveTab] = useState("products");
   const [products, setProducts] = useState([]);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -103,28 +225,21 @@ export default function StockManagement() {
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [stockSearch, setStockSearch] = useState("");
-
-  // Stock in form
+  
+  // Pagination states
+  const [productsPage, setProductsPage] = useState(1);
+  const [historyPage, setHistoryPage] = useState(1);
+  
+  const [editingProduct, setEditingProduct] = useState(null);
   const [productId, setProductId] = useState(null);
   const [quantity, setQuantity] = useState("");
   const [costPrice, setCostPrice] = useState("");
-
-  // New product form
   const [newName, setNewName] = useState("");
   const [newCategory, setNewCategory] = useState("");
   const [newSellingPrice, setNewSellingPrice] = useState("");
   const [newCostPrice, setNewCostPrice] = useState("");
   const [newQuantity, setNewQuantity] = useState("");
   const [newMinStock, setNewMinStock] = useState("5");
-
-  // Edit product state
-  const [editingProduct, setEditingProduct] = useState(null);
-  const [editName, setEditName] = useState("");
-  const [editCategory, setEditCategory] = useState("");
-  const [editSellingPrice, setEditSellingPrice] = useState("");
-  const [editCostPrice, setEditCostPrice] = useState("");
-  const [editMinStock, setEditMinStock] = useState("");
-
   const [from, setFrom] = useState(defaultRange.monthStart);
   const [to, setTo] = useState(defaultRange.today);
 
@@ -139,6 +254,7 @@ export default function StockManagement() {
 
   const fetchHistory = async () => {
     setHistoryLoading(true);
+    setHistoryPage(1); // Reset to page 1 when filtering
     try {
       const res = await fetch(`${STOCK_URL}/history?from=${from}&to=${to}`, { headers: getAuthHeaders() });
       const data = await res.json();
@@ -182,6 +298,11 @@ export default function StockManagement() {
     return () => clearTimeout(t);
   }, [errorMessage]);
 
+  // Reset products page when search changes
+  useEffect(() => { setProductsPage(1); }, [stockSearch]);
+  // Reset history page when date filters change
+  useEffect(() => { setHistoryPage(1); }, [from, to]);
+
   const handleProductSelect = (id) => {
     setProductId(id);
     const p = products.find((p) => p.id === id);
@@ -196,9 +317,7 @@ export default function StockManagement() {
   };
 
   const handleStockIn = async () => {
-    if (!productId || !quantity || costPrice === "") {
-      setErrorMessage("All fields are required."); return;
-    }
+    if (!productId || !quantity || costPrice === "") { setErrorMessage("All fields are required."); return; }
     try {
       const res = await fetch(`${STOCK_URL}/in`, {
         method: "POST", headers: getAuthHeaders(),
@@ -213,17 +332,11 @@ export default function StockManagement() {
   };
 
   const handleNewProduct = async () => {
-    if (!newName || !newSellingPrice || !newQuantity) {
-      setErrorMessage("Name, selling price and quantity are required."); return;
-    }
+    if (!newName || !newSellingPrice || !newQuantity) { setErrorMessage("Name, selling price and quantity are required."); return; }
     try {
       const res = await fetch(`${STOCK_URL}/new-product`, {
         method: "POST", headers: getAuthHeaders(),
-        body: JSON.stringify({
-          name: newName, category: newCategory,
-          sellingPrice: Number(newSellingPrice), costPrice: Number(newCostPrice || 0),
-          quantity: Number(newQuantity), minimumStock: Number(newMinStock || 5),
-        }),
+        body: JSON.stringify({ name: newName, category: newCategory, sellingPrice: Number(newSellingPrice), costPrice: Number(newCostPrice || 0), quantity: Number(newQuantity), minimumStock: Number(newMinStock || 5) }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -233,29 +346,11 @@ export default function StockManagement() {
     } catch (err) { setErrorMessage(err.message); }
   };
 
-  // ── EDIT HANDLERS ──
-  const startEdit = (p) => {
-    setEditingProduct(p);
-    setEditName(p.name);
-    setEditCategory(p.category || "");
-    setEditSellingPrice(p.selling_price);
-    setEditCostPrice(p.cost_price || "");
-    setEditMinStock(p.minimum_stock);
-  };
-
-  const handleEdit = async () => {
-    if (!editName || !editSellingPrice) {
-      setErrorMessage("Name and selling price are required."); return;
-    }
+  const handleEditSave = async (payload) => {
     try {
       const res = await fetch(`${STOCK_URL}/products/${editingProduct.id}`, {
         method: "PUT", headers: getAuthHeaders(),
-        body: JSON.stringify({
-          name: editName, category: editCategory,
-          sellingPrice: Number(editSellingPrice),
-          costPrice: Number(editCostPrice || 0),
-          minimumStock: Number(editMinStock || 5),
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -265,13 +360,10 @@ export default function StockManagement() {
     } catch (err) { setErrorMessage(err.message); }
   };
 
-  // ── DELETE HANDLER ──
   const handleDelete = async (id, name) => {
     if (!window.confirm(`Deactivate "${name}"? It will no longer appear in POS or stock.`)) return;
     try {
-      const res = await fetch(`${STOCK_URL}/products/${id}`, {
-        method: "DELETE", headers: getAuthHeaders(),
-      });
+      const res = await fetch(`${STOCK_URL}/products/${id}`, { method: "DELETE", headers: getAuthHeaders() });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setSuccessMessage(`"${name}" deactivated successfully.`);
@@ -281,13 +373,38 @@ export default function StockManagement() {
 
   const selectedProduct = products.find((p) => p.id === productId);
   const totalCostThisPeriod = history.reduce((s, h) => s + Number(h.totalCost || 0), 0);
+  
+  // Filter & paginate products
   const filteredProducts = products.filter((p) =>
     p.name.toLowerCase().includes(stockSearch.toLowerCase()) ||
     (p.category || "").toLowerCase().includes(stockSearch.toLowerCase())
   );
+  const paginatedProducts = filteredProducts.slice(
+    (productsPage - 1) * ITEMS_PER_PAGE,
+    productsPage * ITEMS_PER_PAGE
+  );
+
+  // Paginate history (no search, just date filtering)
+  const paginatedHistory = history.slice(
+    (historyPage - 1) * ITEMS_PER_PAGE,
+    historyPage * ITEMS_PER_PAGE
+  );
+
+  const lowStockCount = products.filter((p) => p.stock_quantity > 0 && p.stock_quantity <= p.minimum_stock).length;
+  const outOfStockCount = products.filter((p) => p.stock_quantity === 0).length;
+  const totalStockValue = products.reduce((s, p) => s + Number(p.stock_quantity || 0) * Number(p.cost_price || 0), 0);
 
   return (
     <div className="page-shell stock-page" style={{ fontFamily: "'Segoe UI', sans-serif", color: "#1a1a2e" }}>
+
+      {/* EDIT PRODUCT MODAL */}
+      {editingProduct && (
+        <EditProductModal
+          product={editingProduct}
+          onSave={handleEditSave}
+          onClose={() => setEditingProduct(null)}
+        />
+      )}
 
       {/* HEADER */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
@@ -296,8 +413,7 @@ export default function StockManagement() {
           <p style={{ color: "#6b7280", fontSize: "15px", margin: 0 }}>Record stock purchases and track inventory costs.</p>
         </div>
         {activeTab === "products" && (
-          <button
-            onClick={() => { setShowForm(!showForm); resetForm(); setIsNewProduct(false); setEditingProduct(null); }}
+          <button onClick={() => { setShowForm(!showForm); resetForm(); setIsNewProduct(false); setEditingProduct(null); }}
             style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "11px 18px", background: "#1a1a2e", color: "#c9a84c", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "600", fontSize: "14px" }}>
             <FaPlus /> {showForm ? "Cancel" : "Record Stock In"}
           </button>
@@ -307,25 +423,11 @@ export default function StockManagement() {
       {/* TAB SWITCHER */}
       <div style={{ display: "flex", gap: "4px", marginBottom: "24px", background: "#f5f3ee", padding: "4px", borderRadius: "10px", width: "fit-content", border: "1px solid #e0ddd5" }}>
         {[
-          { key: "products", label: "🍺 Products & Drinks" },
+          { key: "products", label: "🍺 Drinks" },
           { key: "ingredients", label: "🥕 Food Ingredients" },
         ].map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => {
-              setActiveTab(tab.key);
-              // Close any open forms when switching tabs
-              setShowForm(false);
-              setEditingProduct(null);
-              resetForm();
-            }}
-            style={{
-              padding: "8px 20px", borderRadius: "7px", fontWeight: "600", fontSize: "13px",
-              cursor: "pointer", border: "none", transition: "all 0.15s",
-              background: activeTab === tab.key ? "#1a1a2e" : "transparent",
-              color: activeTab === tab.key ? "#c9a84c" : "#6b6b6b",
-              boxShadow: activeTab === tab.key ? "0 1px 4px rgba(0,0,0,0.15)" : "none",
-            }}>
+          <button key={tab.key} onClick={() => { setActiveTab(tab.key); setShowForm(false); setEditingProduct(null); resetForm(); }}
+            style={{ padding: "8px 20px", borderRadius: "7px", fontWeight: "600", fontSize: "13px", cursor: "pointer", border: "none", transition: "all 0.15s", background: activeTab === tab.key ? "#1a1a2e" : "transparent", color: activeTab === tab.key ? "#c9a84c" : "#6b6b6b", boxShadow: activeTab === tab.key ? "0 1px 4px rgba(0,0,0,0.15)" : "none" }}>
             {tab.label}
           </button>
         ))}
@@ -334,53 +436,16 @@ export default function StockManagement() {
       {/* ── PRODUCTS TAB ── */}
       {activeTab === "products" && (
         <>
-          {errorMessage && (
-            <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", borderRadius: "8px", padding: "12px 14px", marginBottom: "16px" }}>
-              {errorMessage}
-            </div>
-          )}
-          {successMessage && (
-            <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", color: "#166534", borderRadius: "8px", padding: "12px 14px", marginBottom: "16px" }}>
-              {successMessage}
-            </div>
-          )}
+          {/* SUMMARY CARDS */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "14px", marginBottom: "24px" }}>
+            <SummaryCard label="Total Products" value={products.length} color="#1a1a2e" bg="#f5f3ee" icon="🍺" />
+            <SummaryCard label="Low Stock" value={lowStockCount} color="#d97706" bg="#fff8e1" border="#fde68a" icon={<FaExclamationTriangle size={14} style={{ color: "#d97706" }} />} />
+            <SummaryCard label="Out of Stock" value={outOfStockCount} color="#dc2626" bg="#fef2f2" border="#fecaca" icon={<FaTimesCircle size={14} style={{ color: "#dc2626" }} />} />
+            <SummaryCard label="Stock Value" value={formatMoney(totalStockValue)} color="#2e7d32" bg="#e8f5e9" border="#c8e6c9" icon="💰" />
+          </div>
 
-          {/* EDIT FORM */}
-          {editingProduct && (
-            <div style={{ background: "#fff", border: "1px solid #c9a84c", borderRadius: "12px", padding: "24px", marginBottom: "24px" }}>
-              <h3 style={{ margin: "0 0 16px", fontSize: "16px", fontWeight: "700" }}>✏️ Edit Product — {editingProduct.name}</h3>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "16px", marginBottom: "16px" }}>
-                <div>
-                  <label style={labelStyle}>Product Name *</label>
-                  <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} style={inputStyle} />
-                </div>
-                <div>
-                  <label style={labelStyle}>Category</label>
-                  <input type="text" value={editCategory} onChange={(e) => setEditCategory(e.target.value)} placeholder="e.g. Beer, Food" style={inputStyle} />
-                </div>
-                <div>
-                  <label style={labelStyle}>Min Stock Level</label>
-                  <input type="number" min="0" value={editMinStock} onChange={(e) => setEditMinStock(e.target.value)} style={inputStyle} />
-                </div>
-                <div>
-                  <label style={labelStyle}>Selling Price (KES) *</label>
-                  <input type="number" min="0" step="0.01" value={editSellingPrice} onChange={(e) => setEditSellingPrice(e.target.value)} style={inputStyle} />
-                </div>
-                <div>
-                  <label style={labelStyle}>Cost Price per Unit (KES)</label>
-                  <input type="number" min="0" step="0.01" value={editCostPrice} onChange={(e) => setEditCostPrice(e.target.value)} style={inputStyle} />
-                </div>
-              </div>
-              <div style={{ display: "flex", gap: "10px" }}>
-                <button onClick={handleEdit} style={{ padding: "10px 20px", background: "#1a1a2e", color: "#c9a84c", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "600" }}>
-                  Save Changes
-                </button>
-                <button onClick={() => setEditingProduct(null)} style={{ padding: "10px 20px", background: "#eef1f5", color: "#1a1a2e", border: "1px solid #d0cdc6", borderRadius: "8px", cursor: "pointer", fontWeight: "600" }}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
+          {errorMessage && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", borderRadius: "8px", padding: "12px 14px", marginBottom: "16px" }}>{errorMessage}</div>}
+          {successMessage && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", color: "#166534", borderRadius: "8px", padding: "12px 14px", marginBottom: "16px" }}>{successMessage}</div>}
 
           {/* STOCK IN FORM */}
           {showForm && (
@@ -388,10 +453,7 @@ export default function StockManagement() {
               <div style={{ display: "flex", gap: "8px", marginBottom: "20px" }}>
                 {["existing", "new"].map((type) => (
                   <button key={type} onClick={() => { setIsNewProduct(type === "new"); resetForm(); }}
-                    style={{ padding: "8px 18px", borderRadius: "8px", fontWeight: "600", fontSize: "13px", cursor: "pointer",
-                      background: (type === "new") === isNewProduct ? "#1a1a2e" : "#fff",
-                      color: (type === "new") === isNewProduct ? "#c9a84c" : "#4a4a4a",
-                      border: (type === "new") === isNewProduct ? "1px solid #1a1a2e" : "1px solid #d0cdc6" }}>
+                    style={{ padding: "8px 18px", borderRadius: "8px", fontWeight: "600", fontSize: "13px", cursor: "pointer", background: (type === "new") === isNewProduct ? "#1a1a2e" : "#fff", color: (type === "new") === isNewProduct ? "#c9a84c" : "#4a4a4a", border: (type === "new") === isNewProduct ? "1px solid #1a1a2e" : "1px solid #d0cdc6" }}>
                     {type === "existing" ? "📦 Existing Product" : "✨ New Product"}
                   </button>
                 ))}
@@ -423,8 +485,8 @@ export default function StockManagement() {
                     </div>
                   )}
                   <div style={{ display: "flex", gap: "10px" }}>
-                    <button onClick={handleStockIn} style={{ padding: "10px 20px", background: "#1a1a2e", color: "#c9a84c", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "600" }}>Confirm Stock In</button>
-                    <button onClick={() => { setShowForm(false); resetForm(); }} style={{ padding: "10px 20px", background: "#eef1f5", color: "#1a1a2e", border: "1px solid #d0cdc6", borderRadius: "8px", cursor: "pointer", fontWeight: "600" }}>Cancel</button>
+                    <button onClick={handleStockIn} style={primaryBtn}>Confirm Stock In</button>
+                    <button onClick={() => { setShowForm(false); resetForm(); }} style={secondaryBtn}>Cancel</button>
                   </div>
                 </>
               )}
@@ -458,8 +520,8 @@ export default function StockManagement() {
                     </div>
                   )}
                   <div style={{ display: "flex", gap: "10px" }}>
-                    <button onClick={handleNewProduct} style={{ padding: "10px 20px", background: "#1a1a2e", color: "#c9a84c", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "600" }}>Create Product & Record Stock</button>
-                    <button onClick={() => { setShowForm(false); resetForm(); setIsNewProduct(false); }} style={{ padding: "10px 20px", background: "#eef1f5", color: "#1a1a2e", border: "1px solid #d0cdc6", borderRadius: "8px", cursor: "pointer", fontWeight: "600" }}>Cancel</button>
+                    <button onClick={handleNewProduct} style={primaryBtn}>Create Product & Record Stock</button>
+                    <button onClick={() => { setShowForm(false); resetForm(); setIsNewProduct(false); }} style={secondaryBtn}>Cancel</button>
                   </div>
                 </>
               )}
@@ -472,6 +534,7 @@ export default function StockManagement() {
               <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                 <FaBoxOpen style={{ color: "#c9a84c" }} />
                 <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "700" }}>Current Stock Levels</h3>
+                <span style={{ background: "#1a1a2e", color: "#c9a84c", borderRadius: "20px", padding: "1px 10px", fontSize: "12px", fontWeight: "600" }}>{filteredProducts.length}</span>
               </div>
               <div style={{ position: "relative" }}>
                 <FaSearch style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af", fontSize: "12px" }} />
@@ -496,12 +559,12 @@ export default function StockManagement() {
               <tbody>
                 {loading ? (
                   <tr><td colSpan={9} style={{ ...tdStyle, textAlign: "center", color: "#888" }}>Loading...</td></tr>
-                ) : filteredProducts.length === 0 ? (
+                ) : paginatedProducts.length === 0 ? (
                   <tr><td colSpan={9} style={{ ...tdStyle, textAlign: "center", color: "#888" }}>No products found</td></tr>
-                ) : filteredProducts.map((p) => {
+                ) : paginatedProducts.map((p) => {
                   const margin = Number(p.selling_price) - Number(p.cost_price);
                   const marginPct = Number(p.selling_price) > 0 ? ((margin / Number(p.selling_price)) * 100).toFixed(0) : 0;
-                  const isLow = p.stock_quantity <= p.minimum_stock;
+                  const isLow = p.stock_quantity <= p.minimum_stock && p.stock_quantity > 0;
                   const isOut = p.stock_quantity === 0;
                   return (
                     <tr key={p.id}
@@ -509,11 +572,7 @@ export default function StockManagement() {
                       onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
                       style={{ transition: "background 0.15s" }}>
                       <td style={{ ...tdStyle, fontWeight: "600" }}>{p.name}</td>
-                      <td style={tdStyle}>
-                        <span style={{ background: "#f0ede6", color: "#6b6b6b", padding: "2px 8px", borderRadius: "20px", fontSize: "12px" }}>
-                          {p.category || "Uncategorized"}
-                        </span>
-                      </td>
+                      <td style={tdStyle}><span style={{ background: "#f0ede6", color: "#6b6b6b", padding: "2px 8px", borderRadius: "20px", fontSize: "12px" }}>{p.category || "Uncategorized"}</span></td>
                       <td style={{ ...tdStyle, fontWeight: "700", color: isOut ? "#dc2626" : isLow ? "#d97706" : "#2e7d32" }}>{p.stock_quantity}</td>
                       <td style={{ ...tdStyle, color: "#6b6b6b" }}>{p.minimum_stock}</td>
                       <td style={tdStyle}>{p.cost_price > 0 ? formatMoney(p.cost_price) : <span style={{ color: "#9ca3af", fontSize: "12px" }}>Not set</span>}</td>
@@ -522,25 +581,14 @@ export default function StockManagement() {
                         {p.cost_price > 0 ? `${formatMoney(margin)} (${marginPct}%)` : <span style={{ color: "#9ca3af", fontSize: "12px" }}>Set cost price</span>}
                       </td>
                       <td style={tdStyle}>
-                        <span style={{
-                          background: isOut ? "#fef2f2" : isLow ? "#fff8e1" : "#e8f5e9",
-                          color: isOut ? "#dc2626" : isLow ? "#d97706" : "#2e7d32",
-                          border: `1px solid ${isOut ? "#fecaca" : isLow ? "#fde68a" : "#c8e6c9"}`,
-                          padding: "2px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600",
-                        }}>
+                        <span style={{ background: isOut ? "#fef2f2" : isLow ? "#fff8e1" : "#e8f5e9", color: isOut ? "#dc2626" : isLow ? "#d97706" : "#2e7d32", border: `1px solid ${isOut ? "#fecaca" : isLow ? "#fde68a" : "#c8e6c9"}`, padding: "2px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600" }}>
                           {isOut ? "Out of Stock" : isLow ? "Low Stock" : "In Stock"}
                         </span>
                       </td>
                       <td style={tdStyle}>
                         <div style={{ display: "flex", gap: "6px" }}>
-                          <button onClick={() => { startEdit(p); setShowForm(false); }}
-                            style={{ ...iconBtnStyle, background: "#1a1a2e", color: "#c9a84c" }} title="Edit product">
-                            <FaEdit size={12} />
-                          </button>
-                          <button onClick={() => handleDelete(p.id, p.name)}
-                            style={{ ...iconBtnStyle, background: "#fef2f2", color: "#dc2626" }} title="Deactivate product">
-                            <FaTrash size={12} />
-                          </button>
+                          <button onClick={() => setEditingProduct(p)} style={{ ...iconBtnStyle, background: "#1a1a2e", color: "#c9a84c" }} title="Edit product"><FaEdit size={12} /></button>
+                          <button onClick={() => handleDelete(p.id, p.name)} style={{ ...iconBtnStyle, background: "#fef2f2", color: "#dc2626" }} title="Deactivate product"><FaTrash size={12} /></button>
                         </div>
                       </td>
                     </tr>
@@ -548,6 +596,7 @@ export default function StockManagement() {
                 })}
               </tbody>
             </table>
+            <Pagination total={filteredProducts.length} page={productsPage} perPage={ITEMS_PER_PAGE} onChange={setProductsPage} />
           </div>
 
           {/* STOCK IN HISTORY */}
@@ -561,14 +610,12 @@ export default function StockManagement() {
                 <button onClick={fetchHistory} style={{ padding: "7px 14px", background: "#1a1a2e", color: "#c9a84c", border: "none", borderRadius: "7px", cursor: "pointer", fontWeight: "600", fontSize: "13px" }}>Filter</button>
               </div>
             </div>
-
             {!historyLoading && history.length > 0 && (
               <div style={{ padding: "12px 20px", background: "#faf9f6", borderBottom: "1px solid #e0ddd5", display: "flex", gap: "24px" }}>
                 <div><span style={{ fontSize: "12px", color: "#6b6b6b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Total Spent: </span><span style={{ fontWeight: "700", color: "#1a1a2e" }}>{formatMoney(totalCostThisPeriod)}</span></div>
                 <div><span style={{ fontSize: "12px", color: "#6b6b6b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Records: </span><span style={{ fontWeight: "700", color: "#1a1a2e" }}>{history.length}</span></div>
               </div>
             )}
-
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
@@ -583,9 +630,9 @@ export default function StockManagement() {
               <tbody>
                 {historyLoading ? (
                   <tr><td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "#888" }}>Loading...</td></tr>
-                ) : history.length === 0 ? (
+                ) : paginatedHistory.length === 0 ? (
                   <tr><td colSpan={6} style={{ ...tdStyle, textAlign: "center", color: "#888" }}>No stock records in this period</td></tr>
-                ) : history.map((h, i) => (
+                ) : paginatedHistory.map((h, i) => (
                   <tr key={i}
                     onMouseEnter={(e) => e.currentTarget.style.background = "#faf9f6"}
                     onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
@@ -600,15 +647,13 @@ export default function StockManagement() {
                 ))}
               </tbody>
             </table>
+            <Pagination total={history.length} page={historyPage} perPage={ITEMS_PER_PAGE} onChange={setHistoryPage} />
           </div>
         </>
       )}
 
       {/* ── INGREDIENTS TAB ── */}
-      {activeTab === "ingredients" && (
-        <IngredientStock />
-      )}
-
+      {activeTab === "ingredients" && <IngredientStock />}
     </div>
   );
 }

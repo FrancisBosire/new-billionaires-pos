@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState, useRef } from "react";
-import { FaPlus, FaSearch, FaEdit, FaTrash, FaWarehouse, FaMinusCircle } from "react-icons/fa";
+import { FaPlus, FaSearch, FaEdit, FaTrash, FaWarehouse, FaMinusCircle, FaChevronLeft, FaChevronRight, FaTimes } from "react-icons/fa";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 const ING_URL = `${API_BASE_URL}/ingredient-stock/ingredients`;
 const ING_BASE_URL = `${API_BASE_URL}/ingredient-stock`;
+const ITEMS_PER_PAGE = 20;
 
 const getAuthHeaders = () => ({
   "Content-Type": "application/json",
@@ -29,6 +30,101 @@ const primaryBtn = { padding: "10px 20px", background: "#1a1a2e", color: "#c9a84
 const secondaryBtn = { padding: "10px 20px", background: "#eef1f5", color: "#1a1a2e", border: "1px solid #d0cdc6", borderRadius: "8px", cursor: "pointer", fontWeight: "600", fontSize: "14px" };
 
 const RELEASE_REASONS = ["Usage", "Wastage", "Spoilage", "Other"];
+
+// ── PAGINATION COMPONENT ─────────────────────────────────────
+function Pagination({ total, page, perPage, onChange }) {
+  const totalPages = Math.ceil(total / perPage);
+  if (totalPages <= 1) return null;
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 20px", borderTop: "1px solid #e0ddd5", background: "#faf9f6" }}>
+      <span style={{ fontSize: "13px", color: "#6b6b6b" }}>
+        Showing {Math.min((page - 1) * perPage + 1, total)}–{Math.min(page * perPage, total)} of {total}
+      </span>
+      <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+        <button onClick={() => onChange(page - 1)} disabled={page === 1}
+          style={{ ...iconBtnStyle, background: page === 1 ? "#f5f3ee" : "#1a1a2e", color: page === 1 ? "#ccc" : "#c9a84c", cursor: page === 1 ? "not-allowed" : "pointer" }}>
+          <FaChevronLeft size={11} />
+        </button>
+        {Array.from({ length: totalPages }, (_, i) => i + 1)
+          .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 1)
+          .reduce((acc, p, idx, arr) => {
+            if (idx > 0 && p - arr[idx - 1] > 1) acc.push("...");
+            acc.push(p);
+            return acc;
+          }, [])
+          .map((p, idx) =>
+            p === "..." ? (
+              <span key={`ellipsis-${idx}`} style={{ fontSize: "13px", color: "#9ca3af", padding: "0 4px" }}>…</span>
+            ) : (
+              <button key={p} onClick={() => onChange(p)}
+                style={{ width: "32px", height: "30px", borderRadius: "6px", border: "none", cursor: "pointer", fontWeight: "600", fontSize: "13px", background: p === page ? "#1a1a2e" : "#f5f3ee", color: p === page ? "#c9a84c" : "#4a4a4a" }}>
+                {p}
+              </button>
+            )
+          )}
+        <button onClick={() => onChange(page + 1)} disabled={page === totalPages}
+          style={{ ...iconBtnStyle, background: page === totalPages ? "#f5f3ee" : "#1a1a2e", color: page === totalPages ? "#ccc" : "#c9a84c", cursor: page === totalPages ? "not-allowed" : "pointer" }}>
+          <FaChevronRight size={11} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── EDIT INGREDIENT MODAL ────────────────────────────────────
+function EditIngredientModal({ ingredient, onSave, onClose }) {
+  const [editName, setEditName] = useState(ingredient.name);
+  const [editUnit, setEditUnit] = useState(ingredient.default_unit || "kg");
+  const [editMinQty, setEditMinQty] = useState(ingredient.minimum_quantity);
+  const [editNotes, setEditNotes] = useState(ingredient.notes || "");
+  const [error, setError] = useState("");
+
+  const handleSave = () => {
+    if (!editName) { setError("Ingredient name is required."); return; }
+    onSave({ name: editName, defaultUnit: editUnit, minimumQuantity: Number(editMinQty || 0), notes: editNotes || undefined });
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ background: "#fff", borderRadius: "14px", padding: "28px", width: "100%", maxWidth: "580px", boxShadow: "0 20px 60px rgba(0,0,0,0.2)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+          <h3 style={{ margin: 0, fontSize: "17px", fontWeight: "700" }}>✏️ Edit Ingredient — {ingredient.name}</h3>
+          <button onClick={onClose} style={{ ...iconBtnStyle, background: "#f5f3ee", color: "#6b6b6b", width: "34px", height: "34px" }}>
+            <FaTimes size={14} />
+          </button>
+        </div>
+        {error && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", borderRadius: "8px", padding: "10px 14px", marginBottom: "16px", fontSize: "13px" }}>{error}</div>}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={labelStyle}>Ingredient Name *</label>
+            <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Unit of Measurement</label>
+            <select value={editUnit} onChange={(e) => setEditUnit(e.target.value)} style={inputStyle}>
+              {["kg", "g", "litres", "ml", "pcs", "pieces", "dozen", "trays", "bags", "boxes"].map((u) => (
+                <option key={u} value={u}>{u}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Minimum Stock Level</label>
+            <input type="number" min="0" step="0.01" value={editMinQty} onChange={(e) => setEditMinQty(e.target.value)} style={inputStyle} />
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={labelStyle}>Notes (optional)</label>
+            <input type="text" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} placeholder="e.g. Store in freezer" style={inputStyle} />
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={secondaryBtn}>Cancel</button>
+          <button onClick={handleSave} style={primaryBtn}>Save Changes</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── SEARCHABLE INGREDIENT DROPDOWN ───────────────────────────
 function IngredientSearch({ ingredients, value, onChange }) {
@@ -118,6 +214,10 @@ export default function IngredientStock() {
   const [from, setFrom] = useState(defaultRange.monthStart);
   const [to, setTo] = useState(defaultRange.today);
 
+  // Pagination states
+  const [ingredientsPage, setIngredientsPage] = useState(1);
+  const [historyPage, setHistoryPage] = useState(1);
+
   // ── FORM VISIBILITY ──
   const [showStockInForm, setShowStockInForm] = useState(false);
   const [showNewForm, setShowNewForm] = useState(false);
@@ -142,12 +242,6 @@ export default function IngredientStock() {
   const [newMinQty, setNewMinQty] = useState("5");
   const [newNotes, setNewNotes] = useState("");
 
-  // ── EDIT FORM ──
-  const [editName, setEditName] = useState("");
-  const [editUnit, setEditUnit] = useState("");
-  const [editMinQty, setEditMinQty] = useState("");
-  const [editNotes, setEditNotes] = useState("");
-
   // ── DATA FETCHING ─────────────────────────────────────────
   const fetchIngredients = async () => {
     try {
@@ -160,6 +254,7 @@ export default function IngredientStock() {
 
   const fetchHistory = async () => {
     setHistoryLoading(true);
+    setHistoryPage(1); // Reset to page 1 when filtering
     try {
       const res = await fetch(`${ING_BASE_URL}/history?from=${from}&to=${to}`, { headers: getAuthHeaders() });
       const data = await res.json();
@@ -203,6 +298,10 @@ export default function IngredientStock() {
     return () => clearTimeout(t);
   }, [errorMessage]);
 
+  // Reset pages when filters change
+  useEffect(() => { setIngredientsPage(1); }, [search]);
+  useEffect(() => { setHistoryPage(1); }, [from, to]);
+
   // ── HELPERS ──────────────────────────────────────────────
   const closeAllForms = () => {
     setShowStockInForm(false);
@@ -233,18 +332,14 @@ export default function IngredientStock() {
 
   const handleRelease = async () => {
     if (!releaseIngredientId || !releaseQty) { setErrorMessage("Ingredient and quantity are required."); return; }
-
     const releaseIngredient = ingredients.find((i) => i.id === releaseIngredientId);
     if (Number(releaseQty) > Number(releaseIngredient?.current_quantity)) {
       setErrorMessage("Cannot release more than available stock."); return;
     }
-
-    // Build notes from reason + custom note
     const noteParts = [];
     if (releaseReason) noteParts.push(releaseReason);
     if (releaseCustomNote) noteParts.push(releaseCustomNote);
     const notes = noteParts.join(" — ") || undefined;
-
     try {
       const res = await fetch(`${ING_BASE_URL}/stock-out`, {
         method: "POST", headers: getAuthHeaders(),
@@ -273,21 +368,11 @@ export default function IngredientStock() {
     } catch (err) { setErrorMessage(err.message); }
   };
 
-  const startEdit = (ing) => {
-    closeAllForms();
-    setEditingIngredient(ing);
-    setEditName(ing.name);
-    setEditUnit(ing.default_unit || "kg");
-    setEditMinQty(ing.minimum_quantity);
-    setEditNotes(ing.notes || "");
-  };
-
-  const handleEdit = async () => {
-    if (!editName) { setErrorMessage("Ingredient name is required."); return; }
+  const handleEditSave = async (payload) => {
     try {
       const res = await fetch(`${ING_URL}/${editingIngredient.id}`, {
         method: "PUT", headers: getAuthHeaders(),
-        body: JSON.stringify({ name: editName, defaultUnit: editUnit, minimumQuantity: Number(editMinQty || 0), notes: editNotes || undefined }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -308,10 +393,19 @@ export default function IngredientStock() {
     } catch (err) { setErrorMessage(err.message); }
   };
 
-  // ── DERIVED DATA ─────────────────────────────────────────
+  // ── DERIVED & PAGINATED DATA ─────────────────────────────
   const filteredIngredients = ingredients.filter((i) =>
     i.name.toLowerCase().includes(search.toLowerCase())
   );
+  const paginatedIngredients = filteredIngredients.slice(
+    (ingredientsPage - 1) * ITEMS_PER_PAGE,
+    ingredientsPage * ITEMS_PER_PAGE
+  );
+  const paginatedHistory = history.slice(
+    (historyPage - 1) * ITEMS_PER_PAGE,
+    historyPage * ITEMS_PER_PAGE
+  );
+
   const selectedStockIngredient = ingredients.find((i) => i.id === stockIngredientId);
   const selectedReleaseIngredient = ingredients.find((i) => i.id === releaseIngredientId);
   const totalInventoryValue = ingredients.reduce((sum, i) =>
@@ -329,21 +423,27 @@ export default function IngredientStock() {
   return (
     <div style={{ fontFamily: "'Segoe UI', sans-serif", color: "#1a1a2e" }}>
 
+      {/* EDIT MODAL */}
+      {editingIngredient && (
+        <EditIngredientModal
+          ingredient={editingIngredient}
+          onSave={handleEditSave}
+          onClose={() => setEditingIngredient(null)}
+        />
+      )}
+
       {/* ACTION BAR */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-          <button
-            onClick={() => { closeAllForms(); setShowNewForm(!showNewForm); resetNewForm(); }}
+          <button onClick={() => { closeAllForms(); setShowNewForm(!showNewForm); resetNewForm(); }}
             style={{ ...primaryBtn, display: "inline-flex", alignItems: "center", gap: "8px" }}>
             <FaPlus /> {showNewForm ? "Cancel" : "New Ingredient"}
           </button>
-          <button
-            onClick={() => { closeAllForms(); setShowStockInForm(!showStockInForm); resetStockInForm(); }}
+          <button onClick={() => { closeAllForms(); setShowStockInForm(!showStockInForm); resetStockInForm(); }}
             style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 18px", background: "#f5f3ee", color: "#1a1a2e", border: "1px solid #d0cdc6", borderRadius: "8px", cursor: "pointer", fontWeight: "600", fontSize: "14px" }}>
             <FaWarehouse size={13} /> {showStockInForm ? "Cancel" : "Record Stock In"}
           </button>
-          <button
-            onClick={() => { closeAllForms(); setShowReleaseForm(!showReleaseForm); resetReleaseForm(); }}
+          <button onClick={() => { closeAllForms(); setShowReleaseForm(!showReleaseForm); resetReleaseForm(); }}
             style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "10px 18px", background: showReleaseForm ? "#fef2f2" : "#fff8e1", color: "#b45309", border: "1px solid #fde68a", borderRadius: "8px", cursor: "pointer", fontWeight: "600", fontSize: "14px" }}>
             <FaMinusCircle size={13} /> {showReleaseForm ? "Cancel" : "Release to Kitchen"}
           </button>
@@ -374,26 +474,10 @@ export default function IngredientStock() {
         <div style={{ background: "#fff", border: "1px solid #c9a84c", borderRadius: "12px", padding: "24px", marginBottom: "24px" }}>
           <h3 style={{ margin: "0 0 18px", fontSize: "16px", fontWeight: "700" }}>✨ Add New Ingredient</h3>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "16px" }}>
-            <div>
-              <label style={labelStyle}>Ingredient Name *</label>
-              <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Chicken Breast" style={inputStyle} />
-            </div>
-            <div>
-              <label style={labelStyle}>Unit of Measurement</label>
-              <select value={newUnit} onChange={(e) => setNewUnit(e.target.value)} style={inputStyle}>
-                {["kg", "g", "litres", "ml", "pcs", "pieces", "dozen", "trays", "bags", "boxes"].map((u) => (
-                  <option key={u} value={u}>{u}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Minimum Stock Level</label>
-              <input type="number" min="0" step="0.01" value={newMinQty} onChange={(e) => setNewMinQty(e.target.value)} placeholder="e.g. 5" style={inputStyle} />
-            </div>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <label style={labelStyle}>Notes (optional)</label>
-              <input type="text" value={newNotes} onChange={(e) => setNewNotes(e.target.value)} placeholder="e.g. Store in freezer" style={inputStyle} />
-            </div>
+            <div><label style={labelStyle}>Ingredient Name *</label><input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Chicken Breast" style={inputStyle} /></div>
+            <div><label style={labelStyle}>Unit of Measurement</label><select value={newUnit} onChange={(e) => setNewUnit(e.target.value)} style={inputStyle}>{["kg", "g", "litres", "ml", "pcs", "pieces", "dozen", "trays", "bags", "boxes"].map((u) => (<option key={u} value={u}>{u}</option>))}</select></div>
+            <div><label style={labelStyle}>Minimum Stock Level</label><input type="number" min="0" step="0.01" value={newMinQty} onChange={(e) => setNewMinQty(e.target.value)} placeholder="e.g. 5" style={inputStyle} /></div>
+            <div style={{ gridColumn: "1 / -1" }}><label style={labelStyle}>Notes (optional)</label><input type="text" value={newNotes} onChange={(e) => setNewNotes(e.target.value)} placeholder="e.g. Store in freezer" style={inputStyle} /></div>
           </div>
           <div style={{ display: "flex", gap: "10px" }}>
             <button onClick={handleNewIngredient} style={primaryBtn}>Create Ingredient</button>
@@ -407,22 +491,10 @@ export default function IngredientStock() {
         <div style={{ background: "#fff", border: "1px solid #e0ddd5", borderRadius: "12px", padding: "24px", marginBottom: "24px" }}>
           <h3 style={{ margin: "0 0 18px", fontSize: "16px", fontWeight: "700" }}>📦 Record Stock In</h3>
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: "16px", marginBottom: "16px" }}>
-            <div>
-              <label style={labelStyle}>Ingredient</label>
-              <IngredientSearch ingredients={ingredients} value={stockIngredientId} onChange={setStockIngredientId} />
-            </div>
-            <div>
-              <label style={labelStyle}>Quantity Received{selectedStockIngredient ? ` (${selectedStockIngredient.default_unit})` : ""}</label>
-              <input type="number" min="0.01" step="0.01" value={stockQty} onChange={(e) => setStockQty(e.target.value)} placeholder="e.g. 20" style={inputStyle} />
-            </div>
-            <div>
-              <label style={labelStyle}>Cost Per Unit (KES)</label>
-              <input type="number" min="0" step="0.01" value={stockCostPerUnit} onChange={(e) => setStockCostPerUnit(e.target.value)} placeholder="e.g. 650" style={inputStyle} />
-            </div>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <label style={labelStyle}>Notes (optional)</label>
-              <input type="text" value={stockNotes} onChange={(e) => setStockNotes(e.target.value)} placeholder="e.g. Supplier: XYZ Distributors" style={inputStyle} />
-            </div>
+            <div><label style={labelStyle}>Ingredient</label><IngredientSearch ingredients={ingredients} value={stockIngredientId} onChange={setStockIngredientId} /></div>
+            <div><label style={labelStyle}>Quantity Received{selectedStockIngredient ? ` (${selectedStockIngredient.default_unit})` : ""}</label><input type="number" min="0.01" step="0.01" value={stockQty} onChange={(e) => setStockQty(e.target.value)} placeholder="e.g. 20" style={inputStyle} /></div>
+            <div><label style={labelStyle}>Cost Per Unit (KES)</label><input type="number" min="0" step="0.01" value={stockCostPerUnit} onChange={(e) => setStockCostPerUnit(e.target.value)} placeholder="e.g. 650" style={inputStyle} /></div>
+            <div style={{ gridColumn: "1 / -1" }}><label style={labelStyle}>Notes (optional)</label><input type="text" value={stockNotes} onChange={(e) => setStockNotes(e.target.value)} placeholder="e.g. Supplier: XYZ Distributors" style={inputStyle} /></div>
           </div>
           {selectedStockIngredient && stockQty && (
             <div style={{ background: "#f5f3ee", border: "1px solid #e0ddd5", borderRadius: "8px", padding: "14px 18px", marginBottom: "16px", display: "flex", gap: "28px", flexWrap: "wrap" }}>
@@ -453,55 +525,34 @@ export default function IngredientStock() {
           <h3 style={{ margin: "0 0 6px", fontSize: "16px", fontWeight: "700" }}>🍳 Release to Kitchen</h3>
           <p style={{ margin: "0 0 18px", fontSize: "13px", color: "#6b6b6b" }}>Record ingredients being released for kitchen use. This will deduct from current stock.</p>
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: "16px", marginBottom: "16px" }}>
-            <div>
-              <label style={labelStyle}>Ingredient</label>
-              <IngredientSearch ingredients={ingredients} value={releaseIngredientId} onChange={setReleaseIngredientId} />
-            </div>
-            <div>
-              <label style={labelStyle}>Quantity{selectedReleaseIngredient ? ` (${selectedReleaseIngredient.default_unit})` : ""}</label>
-              <input type="number" min="0.01" step="0.01" value={releaseQty} onChange={(e) => setReleaseQty(e.target.value)} placeholder="e.g. 2" style={inputStyle} />
-            </div>
+            <div><label style={labelStyle}>Ingredient</label><IngredientSearch ingredients={ingredients} value={releaseIngredientId} onChange={setReleaseIngredientId} /></div>
+            <div><label style={labelStyle}>Quantity{selectedReleaseIngredient ? ` (${selectedReleaseIngredient.default_unit})` : ""}</label><input type="number" min="0.01" step="0.01" value={releaseQty} onChange={(e) => setReleaseQty(e.target.value)} placeholder="e.g. 2" style={inputStyle} /></div>
           </div>
-
-          {/* REASON SELECTOR */}
           <div style={{ marginBottom: "16px" }}>
             <label style={labelStyle}>Reason (optional)</label>
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "10px" }}>
               {RELEASE_REASONS.map((r) => (
                 <button key={r} onClick={() => setReleaseReason(releaseReason === r ? "" : r)}
-                  style={{
-                    padding: "6px 16px", borderRadius: "20px", fontSize: "13px", cursor: "pointer", fontWeight: "600", border: "1px solid",
-                    background: releaseReason === r ? "#1a1a2e" : "#fff",
-                    color: releaseReason === r ? "#c9a84c" : "#4a4a4a",
-                    borderColor: releaseReason === r ? "#1a1a2e" : "#d0cdc6",
-                  }}>
+                  style={{ padding: "6px 16px", borderRadius: "20px", fontSize: "13px", cursor: "pointer", fontWeight: "600", border: "1px solid", background: releaseReason === r ? "#1a1a2e" : "#fff", color: releaseReason === r ? "#c9a84c" : "#4a4a4a", borderColor: releaseReason === r ? "#1a1a2e" : "#d0cdc6" }}>
                   {r}
                 </button>
               ))}
             </div>
-            <input type="text" value={releaseCustomNote} onChange={(e) => setReleaseCustomNote(e.target.value)}
-              placeholder="Additional notes e.g. used for lunch service..." style={inputStyle} />
+            <input type="text" value={releaseCustomNote} onChange={(e) => setReleaseCustomNote(e.target.value)} placeholder="Additional notes e.g. used for lunch service..." style={inputStyle} />
           </div>
-
-          {/* RELEASE PREVIEW */}
           {selectedReleaseIngredient && releaseQty && (
             <div style={{ background: "#fff8e1", border: "1px solid #fde68a", borderRadius: "8px", padding: "14px 18px", marginBottom: "16px", display: "flex", gap: "28px", flexWrap: "wrap" }}>
               {[
                 { label: "Ingredient", value: selectedReleaseIngredient.name },
                 { label: "Current Stock", value: formatQty(selectedReleaseIngredient.current_quantity, selectedReleaseIngredient.default_unit) },
                 { label: "Releasing", value: `-${formatQty(releaseQty, selectedReleaseIngredient.default_unit)}`, color: "#dc2626" },
-                {
-                  label: "Remaining",
-                  value: formatQty(Math.max(0, Number(selectedReleaseIngredient.current_quantity) - Number(releaseQty)), selectedReleaseIngredient.default_unit),
-                  color: Number(selectedReleaseIngredient.current_quantity) - Number(releaseQty) <= Number(selectedReleaseIngredient.minimum_quantity) ? "#d97706" : "#2e7d32"
-                },
+                { label: "Remaining", value: formatQty(Math.max(0, Number(selectedReleaseIngredient.current_quantity) - Number(releaseQty)), selectedReleaseIngredient.default_unit), color: Number(selectedReleaseIngredient.current_quantity) - Number(releaseQty) <= Number(selectedReleaseIngredient.minimum_quantity) ? "#d97706" : "#2e7d32" },
               ].map((item) => (
                 <div key={item.label}>
                   <p style={{ margin: 0, fontSize: "11px", color: "#6b6b6b", textTransform: "uppercase", letterSpacing: "0.05em" }}>{item.label}</p>
                   <p style={{ margin: 0, fontWeight: "700", fontSize: "15px", color: item.color || "#1a1a2e" }}>{item.value}</p>
                 </div>
               ))}
-              {/* Low stock warning */}
               {Number(selectedReleaseIngredient.current_quantity) - Number(releaseQty) <= Number(selectedReleaseIngredient.minimum_quantity) && Number(releaseQty) > 0 && (
                 <div style={{ width: "100%", background: "#fff3cd", border: "1px solid #fde68a", borderRadius: "6px", padding: "8px 12px", fontSize: "13px", color: "#b45309", fontWeight: "600" }}>
                   ⚠️ This will bring stock below the minimum level ({formatQty(selectedReleaseIngredient.minimum_quantity, selectedReleaseIngredient.default_unit)})
@@ -509,46 +560,9 @@ export default function IngredientStock() {
               )}
             </div>
           )}
-
           <div style={{ display: "flex", gap: "10px" }}>
-            <button onClick={handleRelease}
-              style={{ padding: "10px 20px", background: "#b45309", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "600", fontSize: "14px" }}>
-              Confirm Release
-            </button>
+            <button onClick={handleRelease} style={{ padding: "10px 20px", background: "#b45309", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "600", fontSize: "14px" }}>Confirm Release</button>
             <button onClick={() => { setShowReleaseForm(false); resetReleaseForm(); }} style={secondaryBtn}>Cancel</button>
-          </div>
-        </div>
-      )}
-
-      {/* EDIT FORM */}
-      {editingIngredient && (
-        <div style={{ background: "#fff", border: "1px solid #c9a84c", borderRadius: "12px", padding: "24px", marginBottom: "24px" }}>
-          <h3 style={{ margin: "0 0 18px", fontSize: "16px", fontWeight: "700" }}>✏️ Edit Ingredient — {editingIngredient.name}</h3>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px", marginBottom: "16px" }}>
-            <div>
-              <label style={labelStyle}>Ingredient Name *</label>
-              <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} style={inputStyle} />
-            </div>
-            <div>
-              <label style={labelStyle}>Unit of Measurement</label>
-              <select value={editUnit} onChange={(e) => setEditUnit(e.target.value)} style={inputStyle}>
-                {["kg", "g", "litres", "ml", "pcs", "pieces", "dozen", "trays", "bags", "boxes"].map((u) => (
-                  <option key={u} value={u}>{u}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label style={labelStyle}>Minimum Stock Level</label>
-              <input type="number" min="0" step="0.01" value={editMinQty} onChange={(e) => setEditMinQty(e.target.value)} style={inputStyle} />
-            </div>
-            <div style={{ gridColumn: "1 / -1" }}>
-              <label style={labelStyle}>Notes (optional)</label>
-              <input type="text" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} placeholder="e.g. Store in freezer" style={inputStyle} />
-            </div>
-          </div>
-          <div style={{ display: "flex", gap: "10px" }}>
-            <button onClick={handleEdit} style={primaryBtn}>Save Changes</button>
-            <button onClick={() => setEditingIngredient(null)} style={secondaryBtn}>Cancel</button>
           </div>
         </div>
       )}
@@ -559,6 +573,7 @@ export default function IngredientStock() {
           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
             <FaWarehouse style={{ color: "#c9a84c" }} />
             <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "700" }}>Current Ingredient Inventory</h3>
+            <span style={{ background: "#1a1a2e", color: "#c9a84c", borderRadius: "20px", padding: "1px 10px", fontSize: "12px", fontWeight: "600" }}>{filteredIngredients.length}</span>
           </div>
           <div style={{ position: "relative" }}>
             <FaSearch style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "#9ca3af", fontSize: "12px" }} />
@@ -583,9 +598,9 @@ export default function IngredientStock() {
           <tbody>
             {loading ? (
               <tr><td colSpan={8} style={{ ...tdStyle, textAlign: "center", color: "#888" }}>Loading...</td></tr>
-            ) : filteredIngredients.length === 0 ? (
+            ) : paginatedIngredients.length === 0 ? (
               <tr><td colSpan={8} style={{ ...tdStyle, textAlign: "center", color: "#888" }}>No ingredients found</td></tr>
-            ) : filteredIngredients.map((ing) => {
+            ) : paginatedIngredients.map((ing) => {
               const isOut = Number(ing.current_quantity) === 0;
               const isLow = !isOut && Number(ing.current_quantity) <= Number(ing.minimum_quantity);
               const stockValue = Number(ing.current_quantity) * Number(ing.average_cost || 0);
@@ -594,51 +609,17 @@ export default function IngredientStock() {
                   onMouseEnter={(e) => e.currentTarget.style.background = "#faf9f6"}
                   onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
                   style={{ transition: "background 0.15s" }}>
-                  <td style={{ ...tdStyle, fontWeight: "600" }}>
-                    {ing.name}
-                    {ing.notes && <p style={{ margin: "3px 0 0", fontSize: "12px", color: "#6b6b6b", fontWeight: "400", fontStyle: "italic" }}>{ing.notes}</p>}
-                  </td>
-                  <td style={tdStyle}>
-                    <span style={{ background: "#f0ede6", color: "#6b6b6b", padding: "2px 8px", borderRadius: "20px", fontSize: "12px" }}>
-                      {ing.default_unit}
-                    </span>
-                  </td>
-                  <td style={{ ...tdStyle, fontWeight: "700", color: isOut ? "#dc2626" : isLow ? "#d97706" : "#2e7d32" }}>
-                    {Number(ing.current_quantity).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-                  </td>
-                  <td style={{ ...tdStyle, color: "#6b6b6b" }}>
-                    {Number(ing.minimum_quantity).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-                  </td>
-                  <td style={tdStyle}>
-                    {Number(ing.average_cost) > 0
-                      ? formatMoney(ing.average_cost)
-                      : <span style={{ color: "#9ca3af", fontSize: "12px" }}>Not set</span>}
-                  </td>
-                  <td style={{ ...tdStyle, fontWeight: "600" }}>
-                    {Number(ing.average_cost) > 0
-                      ? formatMoney(stockValue)
-                      : <span style={{ color: "#9ca3af", fontSize: "12px" }}>—</span>}
-                  </td>
-                  <td style={tdStyle}>
-                    <span style={{
-                      background: isOut ? "#fef2f2" : isLow ? "#fff8e1" : "#e8f5e9",
-                      color: isOut ? "#dc2626" : isLow ? "#d97706" : "#2e7d32",
-                      border: `1px solid ${isOut ? "#fecaca" : isLow ? "#fde68a" : "#c8e6c9"}`,
-                      padding: "2px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600",
-                    }}>
-                      {isOut ? "Out of Stock" : isLow ? "Low Stock" : "In Stock"}
-                    </span>
-                  </td>
+                  <td style={{ ...tdStyle, fontWeight: "600" }}>{ing.name}{ing.notes && <p style={{ margin: "3px 0 0", fontSize: "12px", color: "#6b6b6b", fontWeight: "400", fontStyle: "italic" }}>{ing.notes}</p>}</td>
+                  <td style={tdStyle}><span style={{ background: "#f0ede6", color: "#6b6b6b", padding: "2px 8px", borderRadius: "20px", fontSize: "12px" }}>{ing.default_unit}</span></td>
+                  <td style={{ ...tdStyle, fontWeight: "700", color: isOut ? "#dc2626" : isLow ? "#d97706" : "#2e7d32" }}>{Number(ing.current_quantity).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+                  <td style={{ ...tdStyle, color: "#6b6b6b" }}>{Number(ing.minimum_quantity).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
+                  <td style={tdStyle}>{Number(ing.average_cost) > 0 ? formatMoney(ing.average_cost) : <span style={{ color: "#9ca3af", fontSize: "12px" }}>Not set</span>}</td>
+                  <td style={{ ...tdStyle, fontWeight: "600" }}>{Number(ing.average_cost) > 0 ? formatMoney(stockValue) : <span style={{ color: "#9ca3af", fontSize: "12px" }}>—</span>}</td>
+                  <td style={tdStyle}><span style={{ background: isOut ? "#fef2f2" : isLow ? "#fff8e1" : "#e8f5e9", color: isOut ? "#dc2626" : isLow ? "#d97706" : "#2e7d32", border: `1px solid ${isOut ? "#fecaca" : isLow ? "#fde68a" : "#c8e6c9"}`, padding: "2px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600" }}>{isOut ? "Out of Stock" : isLow ? "Low Stock" : "In Stock"}</span></td>
                   <td style={tdStyle}>
                     <div style={{ display: "flex", gap: "6px" }}>
-                      <button onClick={() => startEdit(ing)}
-                        style={{ ...iconBtnStyle, background: "#1a1a2e", color: "#c9a84c" }} title="Edit ingredient">
-                        <FaEdit size={12} />
-                      </button>
-                      <button onClick={() => handleDeactivate(ing.id, ing.name)}
-                        style={{ ...iconBtnStyle, background: "#fef2f2", color: "#dc2626" }} title="Deactivate ingredient">
-                        <FaTrash size={12} />
-                      </button>
+                      <button onClick={() => setEditingIngredient(ing)} style={{ ...iconBtnStyle, background: "#1a1a2e", color: "#c9a84c" }} title="Edit ingredient"><FaEdit size={12} /></button>
+                      <button onClick={() => handleDeactivate(ing.id, ing.name)} style={{ ...iconBtnStyle, background: "#fef2f2", color: "#dc2626" }} title="Deactivate ingredient"><FaTrash size={12} /></button>
                     </div>
                   </td>
                 </tr>
@@ -648,16 +629,13 @@ export default function IngredientStock() {
           {!loading && filteredIngredients.length > 0 && (
             <tfoot>
               <tr style={{ background: "#f5f3ee" }}>
-                <td colSpan={5} style={{ ...tdStyle, fontWeight: "700", fontSize: "13px", color: "#6b6b6b", textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "none" }}>
-                  Total Inventory Value
-                </td>
-                <td colSpan={3} style={{ ...tdStyle, fontWeight: "700", fontSize: "15px", color: "#1a1a2e", borderBottom: "none" }}>
-                  {formatMoney(totalInventoryValue)}
-                </td>
+                <td colSpan={5} style={{ ...tdStyle, fontWeight: "700", fontSize: "13px", color: "#6b6b6b", textTransform: "uppercase", letterSpacing: "0.05em", borderBottom: "none" }}>Total Inventory Value</td>
+                <td colSpan={3} style={{ ...tdStyle, fontWeight: "700", fontSize: "15px", color: "#1a1a2e", borderBottom: "none" }}>{formatMoney(totalInventoryValue)}</td>
               </tr>
             </tfoot>
           )}
         </table>
+        <Pagination total={filteredIngredients.length} page={ingredientsPage} perPage={ITEMS_PER_PAGE} onChange={setIngredientsPage} />
       </div>
 
       {/* MOVEMENT HISTORY */}
@@ -665,32 +643,18 @@ export default function IngredientStock() {
         <div style={{ padding: "14px 20px", borderBottom: "2px solid #e0ddd5", background: "#f5f3ee", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
           <h3 style={{ margin: 0, fontSize: "15px", fontWeight: "700" }}>Stock Movement History</h3>
           <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)}
-              style={{ padding: "7px 10px", border: "1px solid #d0cdc6", borderRadius: "7px", fontSize: "13px", outline: "none" }} />
+            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} style={{ padding: "7px 10px", border: "1px solid #d0cdc6", borderRadius: "7px", fontSize: "13px", outline: "none" }} />
             <span style={{ color: "#888", fontSize: "13px" }}>to</span>
-            <input type="date" value={to} onChange={(e) => setTo(e.target.value)}
-              style={{ padding: "7px 10px", border: "1px solid #d0cdc6", borderRadius: "7px", fontSize: "13px", outline: "none" }} />
-            <button onClick={fetchHistory}
-              style={{ padding: "7px 14px", background: "#1a1a2e", color: "#c9a84c", border: "none", borderRadius: "7px", cursor: "pointer", fontWeight: "600", fontSize: "13px" }}>
-              Filter
-            </button>
+            <input type="date" value={to} onChange={(e) => setTo(e.target.value)} style={{ padding: "7px 10px", border: "1px solid #d0cdc6", borderRadius: "7px", fontSize: "13px", outline: "none" }} />
+            <button onClick={fetchHistory} style={{ padding: "7px 14px", background: "#1a1a2e", color: "#c9a84c", border: "none", borderRadius: "7px", cursor: "pointer", fontWeight: "600", fontSize: "13px" }}>Filter</button>
           </div>
         </div>
 
         {!historyLoading && history.length > 0 && (
           <div style={{ padding: "12px 20px", background: "#faf9f6", borderBottom: "1px solid #e0ddd5", display: "flex", gap: "24px", flexWrap: "wrap" }}>
-            <div>
-              <span style={{ fontSize: "12px", color: "#6b6b6b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Total Purchased: </span>
-              <span style={{ fontWeight: "700", color: "#1a1a2e" }}>{formatMoney(totalHistoryCost)}</span>
-            </div>
-            <div>
-              <span style={{ fontSize: "12px", color: "#6b6b6b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Stock-In Records: </span>
-              <span style={{ fontWeight: "700", color: "#2e7d32" }}>{history.filter((h) => h.movement_type === "IN").length}</span>
-            </div>
-            <div>
-              <span style={{ fontSize: "12px", color: "#6b6b6b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Release Records: </span>
-              <span style={{ fontWeight: "700", color: "#b45309" }}>{history.filter((h) => h.movement_type === "OUT").length}</span>
-            </div>
+            <div><span style={{ fontSize: "12px", color: "#6b6b6b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Total Purchased: </span><span style={{ fontWeight: "700", color: "#1a1a2e" }}>{formatMoney(totalHistoryCost)}</span></div>
+            <div><span style={{ fontSize: "12px", color: "#6b6b6b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Stock-In Records: </span><span style={{ fontWeight: "700", color: "#2e7d32" }}>{history.filter((h) => h.movement_type === "IN").length}</span></div>
+            <div><span style={{ fontSize: "12px", color: "#6b6b6b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Release Records: </span><span style={{ fontWeight: "700", color: "#b45309" }}>{history.filter((h) => h.movement_type === "OUT").length}</span></div>
           </div>
         )}
 
@@ -710,27 +674,16 @@ export default function IngredientStock() {
           <tbody>
             {historyLoading ? (
               <tr><td colSpan={8} style={{ ...tdStyle, textAlign: "center", color: "#888" }}>Loading...</td></tr>
-            ) : history.length === 0 ? (
+            ) : paginatedHistory.length === 0 ? (
               <tr><td colSpan={8} style={{ ...tdStyle, textAlign: "center", color: "#888" }}>No records in this period</td></tr>
-            ) : history.map((h) => (
+            ) : paginatedHistory.map((h) => (
               <tr key={h.id}
                 onMouseEnter={(e) => e.currentTarget.style.background = "#faf9f6"}
                 onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
                 style={{ transition: "background 0.15s" }}>
                 <td style={{ ...tdStyle, fontWeight: "600" }}>{h.ingredientName}</td>
-                <td style={tdStyle}>
-                  <span style={{
-                    background: h.movement_type === "IN" ? "#e8f5e9" : "#fff8e1",
-                    color: h.movement_type === "IN" ? "#2e7d32" : "#b45309",
-                    border: `1px solid ${h.movement_type === "IN" ? "#c8e6c9" : "#fde68a"}`,
-                    padding: "2px 8px", borderRadius: "20px", fontSize: "11px", fontWeight: "600",
-                  }}>
-                    {h.movement_type === "IN" ? "Stock In" : "Kitchen Release"}
-                  </span>
-                </td>
-                <td style={{ ...tdStyle, fontWeight: "600", color: h.movement_type === "IN" ? "#2e7d32" : "#b45309" }}>
-                  {h.movement_type === "IN" ? "+" : "-"}{Number(h.quantity).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-                </td>
+                <td style={tdStyle}><span style={{ background: h.movement_type === "IN" ? "#e8f5e9" : "#fff8e1", color: h.movement_type === "IN" ? "#2e7d32" : "#b45309", border: `1px solid ${h.movement_type === "IN" ? "#c8e6c9" : "#fde68a"}`, padding: "2px 8px", borderRadius: "20px", fontSize: "11px", fontWeight: "600" }}>{h.movement_type === "IN" ? "Stock In" : "Kitchen Release"}</span></td>
+                <td style={{ ...tdStyle, fontWeight: "600", color: h.movement_type === "IN" ? "#2e7d32" : "#b45309" }}>{h.movement_type === "IN" ? "+" : "-"}{Number(h.quantity).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}</td>
                 <td style={tdStyle}>{h.unit || "—"}</td>
                 <td style={tdStyle}>{Number(h.cost_per_unit) > 0 ? formatMoney(h.cost_per_unit) : <span style={{ color: "#9ca3af" }}>—</span>}</td>
                 <td style={{ ...tdStyle, fontWeight: "600" }}>{Number(h.total_cost) > 0 ? formatMoney(h.total_cost) : <span style={{ color: "#9ca3af" }}>—</span>}</td>
@@ -740,6 +693,7 @@ export default function IngredientStock() {
             ))}
           </tbody>
         </table>
+        <Pagination total={history.length} page={historyPage} perPage={ITEMS_PER_PAGE} onChange={setHistoryPage} />
       </div>
     </div>
   );

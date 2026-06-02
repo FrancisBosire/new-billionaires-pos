@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { FaEdit, FaTrash, FaPlus } from "react-icons/fa";
+import { FaEdit, FaTrash, FaPlus, FaTimes } from "react-icons/fa";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 const MENU_URL = `${API_BASE_URL}/menu`;
@@ -18,16 +18,28 @@ const inputStyle = { width: "100%", padding: "10px 12px", border: "1px solid #d0
 const labelStyle = { display: "block", fontSize: "13px", fontWeight: "600", color: "#1a1a2e", marginBottom: "6px" };
 const iconBtnStyle = { border: "none", borderRadius: "6px", cursor: "pointer", width: "32px", height: "30px", display: "inline-flex", alignItems: "center", justifyContent: "center" };
 
+// New styles for pagination & modal
+const paginationContainerStyle = { display: "flex", justifyContent: "center", alignItems: "center", gap: "10px", padding: "14px 20px", borderTop: "1px solid #e0ddd5" };
+const paginationBtnStyle = { padding: "8px 14px", background: "#f5f3ee", color: "#1a1a2e", border: "1px solid #d0cdc6", borderRadius: "8px", cursor: "pointer", fontWeight: "600", fontSize: "13px", transition: "all 0.2s" };
+const overlayStyle = { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.45)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000, backdropFilter: "blur(3px)" };
+const modalStyle = { background: "#fff", border: "1px solid #e0ddd5", borderRadius: "12px", padding: "24px", width: "90%", maxWidth: "460px", position: "relative", boxShadow: "0 8px 24px rgba(0,0,0,0.15)" };
+const closeBtnStyle = { position: "absolute", top: "16px", right: "16px", background: "none", border: "none", color: "#6b6b6b", fontSize: "18px", cursor: "pointer", width: "30px", height: "30px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" };
+
 export default function Menu() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false); // New: Edit overlay state
   const [editingItem, setEditingItem] = useState(null);
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [search, setSearch] = useState("");
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const fetchItems = async () => {
     try {
@@ -40,29 +52,16 @@ export default function Menu() {
 
   useEffect(() => {
     let isActive = true;
-
     fetch(MENU_URL, { headers: getAuthHeaders() })
       .then((res) => res.json())
-      .then((data) => {
-        if (isActive) {
-          setItems(Array.isArray(data) ? data : []);
-        }
-      })
-      .catch(() => {
-        if (isActive) {
-          setErrorMessage("Failed to load menu.");
-        }
-      })
-      .finally(() => {
-        if (isActive) {
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      isActive = false;
-    };
+      .then((data) => { if (isActive) setItems(Array.isArray(data) ? data : []); })
+      .catch(() => { if (isActive) setErrorMessage("Failed to load menu."); })
+      .finally(() => { if (isActive) setLoading(false); });
+    return () => { isActive = false; };
   }, []);
+
+  // Reset to page 1 when search changes or items are added/removed
+  useEffect(() => { setCurrentPage(1); }, [search, items.length]);
 
   useEffect(() => {
     if (!successMessage) return;
@@ -90,7 +89,9 @@ export default function Menu() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setSuccessMessage(editingItem ? "Item updated!" : "Item added!");
-      resetForm(); setShowForm(false);
+      resetForm(); 
+      setShowForm(false);
+      setShowEditModal(false);
       await fetchItems();
     } catch (err) { setErrorMessage(err.message); }
   };
@@ -99,7 +100,7 @@ export default function Menu() {
     setEditingItem(item);
     setName(item.name);
     setPrice(item.price);
-    setShowForm(true);
+    setShowEditModal(true); // Open modal instead of inline form
   };
 
   const handleDelete = async (id, name) => {
@@ -117,9 +118,14 @@ export default function Menu() {
     i.name.toLowerCase().includes(search.toLowerCase())
   );
 
+  // Pagination logic
+  const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = filteredItems.slice(indexOfFirstItem, indexOfLastItem);
+
   return (
     <div className="page-shell menu-page" style={{ fontFamily: "'Segoe UI', sans-serif", color: "#1a1a2e" }}>
-
       {/* HEADER */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
         <div>
@@ -137,12 +143,10 @@ export default function Menu() {
       {errorMessage && <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", borderRadius: "8px", padding: "12px 14px", marginBottom: "16px" }}>{errorMessage}</div>}
       {successMessage && <div style={{ background: "#ecfdf5", border: "1px solid #bbf7d0", color: "#166534", borderRadius: "8px", padding: "12px 14px", marginBottom: "16px" }}>{successMessage}</div>}
 
-      {/* FORM */}
+      {/* ADD FORM (Inline) */}
       {showForm && (
         <div style={{ background: "#fff", border: "1px solid #e0ddd5", borderRadius: "12px", padding: "24px", marginBottom: "24px" }}>
-          <h3 style={{ margin: "0 0 16px", fontSize: "16px", fontWeight: "700" }}>
-            {editingItem ? `Edit — ${editingItem.name}` : "New Menu Item"}
-          </h3>
+          <h3 style={{ margin: "0 0 16px", fontSize: "16px", fontWeight: "700" }}>New Menu Item</h3>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
             <div>
               <label style={labelStyle}>Food Name *</label>
@@ -154,12 +158,8 @@ export default function Menu() {
             </div>
           </div>
           <div style={{ display: "flex", gap: "10px" }}>
-            <button onClick={handleSave} style={{ padding: "10px 20px", background: "#1a1a2e", color: "#c9a84c", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "600" }}>
-              {editingItem ? "Save Changes" : "Add to Menu"}
-            </button>
-            <button onClick={() => { resetForm(); setShowForm(false); }} style={{ padding: "10px 20px", background: "#eef1f5", color: "#1a1a2e", border: "1px solid #d0cdc6", borderRadius: "8px", cursor: "pointer", fontWeight: "600" }}>
-              Cancel
-            </button>
+            <button onClick={handleSave} style={{ padding: "10px 20px", background: "#1a1a2e", color: "#c9a84c", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "600" }}>Add to Menu</button>
+            <button onClick={() => { resetForm(); setShowForm(false); }} style={{ padding: "10px 20px", background: "#eef1f5", color: "#1a1a2e", border: "1px solid #d0cdc6", borderRadius: "8px", cursor: "pointer", fontWeight: "600" }}>Cancel</button>
           </div>
         </div>
       )}
@@ -188,16 +188,16 @@ export default function Menu() {
           <tbody>
             {loading ? (
               <tr><td colSpan={4} style={{ ...tdStyle, textAlign: "center", color: "#888", padding: "40px" }}>Loading menu...</td></tr>
-            ) : filteredItems.length === 0 ? (
-              <tr><td colSpan={4} style={{ ...tdStyle, textAlign: "center", color: "#888", padding: "40px" }}>
-                {search ? "No items match your search" : "No menu items yet — add your first food item!"}
-              </td></tr>
-            ) : filteredItems.map((item, i) => (
+            ) : currentItems.length === 0 && !search ? (
+              <tr><td colSpan={4} style={{ ...tdStyle, textAlign: "center", color: "#888", padding: "40px" }}>No menu items yet — add your first food item!</td></tr>
+            ) : currentItems.length === 0 && search ? (
+              <tr><td colSpan={4} style={{ ...tdStyle, textAlign: "center", color: "#888", padding: "40px" }}>No items match your search</td></tr>
+            ) : currentItems.map((item, i) => (
               <tr key={item.id}
                 onMouseEnter={(e) => e.currentTarget.style.background = "#faf9f6"}
                 onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
                 style={{ transition: "background 0.15s" }}>
-                <td style={{ ...tdStyle, color: "#c9a84c", fontWeight: "700" }}>{i + 1}</td>
+                <td style={{ ...tdStyle, color: "#c9a84c", fontWeight: "700" }}>{indexOfFirstItem + i + 1}</td>
                 <td style={{ ...tdStyle, fontWeight: "600" }}>{item.name}</td>
                 <td style={{ ...tdStyle, fontWeight: "600" }}>{formatMoney(item.price)}</td>
                 <td style={tdStyle}>
@@ -214,7 +214,56 @@ export default function Menu() {
             ))}
           </tbody>
         </table>
+
+        {/* PAGINATION CONTROLS */}
+        {totalPages > 1 && (
+          <div style={paginationContainerStyle}>
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              style={{ ...paginationBtnStyle, opacity: currentPage === 1 ? 0.5 : 1, cursor: currentPage === 1 ? "not-allowed" : "pointer" }}
+            >
+              Previous
+            </button>
+            <span style={{ color: "#6b6b6b", fontWeight: "500", fontSize: "13px" }}>
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              style={{ ...paginationBtnStyle, opacity: currentPage === totalPages ? 0.5 : 1, cursor: currentPage === totalPages ? "not-allowed" : "pointer" }}
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* EDIT MODAL OVERLAY */}
+      {showEditModal && (
+        <div style={overlayStyle} onClick={() => { resetForm(); setShowEditModal(false); }}>
+          <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => { resetForm(); setShowEditModal(false); }} style={closeBtnStyle}><FaTimes /></button>
+            <h3 style={{ margin: "0 0 16px", fontSize: "16px", fontWeight: "700" }}>
+              Edit — {editingItem?.name}
+            </h3>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "16px" }}>
+              <div>
+                <label style={labelStyle}>Food Name *</label>
+                <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Pilau" style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>Price (KES) *</label>
+                <input type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="e.g. 500" style={inputStyle} />
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: "10px" }}>
+              <button onClick={handleSave} style={{ padding: "10px 20px", background: "#1a1a2e", color: "#c9a84c", border: "none", borderRadius: "8px", cursor: "pointer", fontWeight: "600" }}>Save Changes</button>
+              <button onClick={() => { resetForm(); setShowEditModal(false); }} style={{ padding: "10px 20px", background: "#eef1f5", color: "#1a1a2e", border: "1px solid #d0cdc6", borderRadius: "8px", cursor: "pointer", fontWeight: "600" }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
