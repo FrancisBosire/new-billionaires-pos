@@ -98,12 +98,14 @@ router.get("/:id", async (req, res) => {
 ========================= */
 
 router.post("/", async (req, res) => {
-  // 🔒 MAINTENANCE MODE CHECK
-  if (global.isMaintenanceMode && req.user.role !== 'owner') {
-    return res.status(503).json({ 
-      error: "System is currently under maintenance. Please try again later or contact the Owner." 
-    });
-  }
+ // 🔒 MAINTENANCE MODE CHECK
+if (global.isMaintenanceMode && req.user.role !== 'owner') {
+  return res.status(503).json({ 
+    error: "SYSTEM UNDER MAINTENANCE",
+    message: "System is currently under maintenance. All sales are temporarily disabled. Please wait for the Owner to restore normal operations.",
+    retryAfter: 300 // 5 minutes
+  });
+}
 
   const { items, paymentMethod, userId } = req.body;
   if (!Array.isArray(items) || items.length === 0) {

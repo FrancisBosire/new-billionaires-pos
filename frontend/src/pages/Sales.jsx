@@ -33,7 +33,8 @@ function Sales({ currentUser }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
+const [successMessage, setSuccessMessage] = useState("");
+const [maintenanceError, setMaintenanceError] = useState(null);
 
   const refreshProducts = async () => {
     const response = await fetch(PRODUCTS_API_URL, { headers: getAuthHeaders() });
@@ -166,42 +167,57 @@ function Sales({ currentUser }) {
   };
 
   const completeSale = async () => {
-    setErrorMessage(""); setSuccessMessage("");
+  setErrorMessage(""); setSuccessMessage("");
 
-    if (cartItems.length === 0) {
-      setErrorMessage("Add at least one item before checkout");
+  // Block if maintenance mode is active
+  if (maintenanceError) {
+    return;
+  }
+
+  if (cartItems.length === 0) {
+    setErrorMessage("Add at least one item before checkout");
+    return;
+  }
+
+  try {
+    setIsSubmitting(true);
+    const response = await fetch(SALES_API_URL, {
+      method: "POST",
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        paymentMethod,
+        userId: currentUser.id,
+        items: cartItems.map((item) => ({
+          productId: item.productId,
+          quantity: item.quantity,
+          type: item.type,
+        })),
+      }),
+    });
+
+    const data = await response.json();
+    
+    // Check for maintenance mode (503 status)
+    if (response.status === 503) {
+      setMaintenanceError({
+        title: data.error || "SYSTEM UNDER MAINTENANCE",
+        message: data.message || "The POS system is temporarily locked by the Owner.",
+      });
+      setIsSubmitting(false);
       return;
     }
+    
+    if (!response.ok) throw new Error(data.message || "Failed to complete sale");
 
-    try {
-      setIsSubmitting(true);
-      const response = await fetch(SALES_API_URL, {
-        method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          paymentMethod,
-          userId: currentUser.id,
-          items: cartItems.map((item) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-            type: item.type,
-          })),
-        }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "Failed to complete sale");
-
-      setSuccessMessage(`Sale #${data.saleId} completed: ${formatMoney(data.totalAmount)} via ${paymentMethod}`);
-      setCartItems([]);
-      await refreshProducts();
-    } catch (error) {
-      setErrorMessage(error.message);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
+    setSuccessMessage(`Sale #${data.saleId} completed: ${formatMoney(data.totalAmount)} via ${paymentMethod}`);
+    setCartItems([]);
+    await refreshProducts();
+  } catch (error) {
+    setErrorMessage(error.message);
+  } finally {
+    setIsSubmitting(false);
+  }
+};
   return (
     <div className="page-shell sales-page">
       <div style={pageHeaderStyle}>
@@ -213,8 +229,67 @@ function Sales({ currentUser }) {
         </div>
       </div>
 
-      {errorMessage && <div style={errorStyle}>{errorMessage}</div>}
-      {successMessage && <div style={successStyle}>{successMessage}</div>}
+      {/* MAINTENANCE MODE ALERT - PERSISTENT */}
+{maintenanceError && (
+  <div style={maintenanceAlertStyle}>
+    <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "12px" }}>
+      <div style={{
+        fontSize: "40px",
+        background: "white",
+        width: "56px",
+        height: "56px",
+        borderRadius: "50%",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0
+      }}>
+        🔧
+      </div>
+      <div style={{ flex: 1 }}>
+        <h2 style={{ 
+          margin: 0, 
+          color: "white", 
+          fontSize: "20px",
+          fontWeight: "700",
+          textTransform: "uppercase",
+          letterSpacing: "0.5px"
+        }}>
+          {maintenanceError.title}
+        </h2>
+        <p style={{ 
+          margin: "6px 0 0", 
+          color: "#fecaca", 
+          fontSize: "14px",
+          lineHeight: "1.5"
+        }}>
+          {maintenanceError.message}
+        </p>
+      </div>
+    </div>
+    
+    <div style={{
+      background: "rgba(0,0,0,0.3)",
+      borderRadius: "8px",
+      padding: "12px 16px",
+      marginTop: "12px",
+      border: "1px solid rgba(255,255,255,0.1)"
+    }}>
+      <p style={{ 
+        margin: 0, 
+        color: "#fee2e2", 
+        fontSize: "13px",
+        fontWeight: "600",
+        textAlign: "center"
+      }}>
+        ⏳ Please contact the Owner to restore system access. Sales are temporarily disabled.
+      </p>
+    </div>
+  </div>
+)}
+
+{errorMessage && <div style={errorStyle}>{errorMessage}</div>}
+{successMessage && <div style={successStyle}>{successMessage}</div>}
 
       <div style={layoutStyle}>
         {/* PRODUCTS PANEL */}
@@ -340,13 +415,27 @@ function Sales({ currentUser }) {
           </div>
 
           <button
-            onClick={completeSale}
-            style={{ ...checkoutButtonStyle, opacity: cartItems.length === 0 || isSubmitting ? 0.6 : 1 }}
-          >
-            {isSubmitting ? "Completing..." : "Complete Sale"}
-          </button>
+  onClick={completeSale}
+  disabled={cartItems.length === 0 || isSubmitting || !!maintenanceError}
+  style={{ 
+    ...checkoutButtonStyle, 
+    opacity: cartItems.length === 0 || isSubmitting || maintenanceError ? 0.6 : 1,
+    cursor: maintenanceError ? "not-allowed" : "pointer",
+    background: maintenanceError ? "#6b7280" : "#1f2a36"
+  }}
+>
+  {maintenanceError ? "🔒 System Locked" : isSubmitting ? "Completing..." : "Complete Sale"}
+</button>
         </aside>
       </div>
+
+      <style>{`
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.9; }
+  }
+`}</style>
+
     </div>
   );
 }
@@ -379,5 +468,14 @@ const activePaymentButtonStyle = { ...paymentButtonStyle, background: "#f4c85a",
 const checkoutButtonStyle = { width: "100%", padding: "12px", background: "#1f2a36", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "700" };
 const errorStyle = { background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", borderRadius: "6px", padding: "12px 14px", marginBottom: "20px", animation: "fadeOut 4s forwards" };
 const successStyle = { background: "#ecfdf5", border: "1px solid #bbf7d0", color: "#166534", borderRadius: "6px", padding: "12px 14px", marginBottom: "20px", animation: "fadeOut 4s forwards" };
+const maintenanceAlertStyle = {
+  background: "linear-gradient(135deg, #dc2626 0%, #991b1b 100%)",
+  border: "3px solid #7f1d1d",
+  borderRadius: "12px",
+  padding: "24px",
+  marginBottom: "20px",
+  boxShadow: "0 8px 24px rgba(220, 38, 38, 0.4)",
+  animation: "pulse 2s infinite"
+};
 
 export default Sales;
