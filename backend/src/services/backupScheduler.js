@@ -4,7 +4,7 @@ import fs from "fs";
 import path from "path";
 
 const setupBackupScheduler = async () => {
-  const { mysqldump } = await import('mysqldump');
+  const mysqldump = (await import('mysqldump')).default;
   
   const backupDir = path.join(process.cwd(), "backups");
   if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
