@@ -13,9 +13,13 @@ const execAsync = promisify(exec);
 // 🔐 STRICTLY OWNER-ONLY ACCESS
 router.use(verifyToken, authorizeRoles("owner"));
 
-// ─ 1. CREATE DATABASE BACKUP ─────────────────────────────
+// ── 1. CREATE DATABASE BACKUP (JavaScript-based) ────────
 router.post("/backup", async (req, res) => {
   try {
+    const { mysqldump } = await import('mysqldump');
+    const path = await import('path');
+    const fs = await import('fs');
+    
     const backupDir = path.join(process.cwd(), "backups");
     if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
     
@@ -23,14 +27,23 @@ router.post("/backup", async (req, res) => {
     const filename = `backup_${process.env.DB_NAME}_${timestamp}.sql`;
     const filepath = path.join(backupDir, filename);
     
-    // Ensure DB credentials are in your .env file
-const cmd = `mysqldump -h${process.env.DB_HOST} -P${process.env.DB_PORT} -u${process.env.DB_USER} -p${process.env.DB_PASSWORD} ${process.env.DB_NAME} > "${filepath}"`;    await execAsync(cmd);
+    // Create backup using JavaScript library
+    await mysqldump({
+      connection: {
+        host: process.env.DB_HOST,
+        user: process.env.DB_USER,
+        password: process.env.DB_PASSWORD,
+        database: process.env.DB_NAME,
+        port: parseInt(process.env.DB_PORT) || 3306,
+      },
+      dumpToFile: filepath,
+    });
     
     const stats = fs.statSync(filepath);
     res.json({ message: "Backup created successfully", filename, size: stats.size });
   } catch (err) {
     console.error("Backup error:", err);
-    res.status(500).json({ error: "Failed to create backup. Ensure mysqldump is installed." });
+    res.status(500).json({ error: "Failed to create backup: " + err.message });
   }
 });
 

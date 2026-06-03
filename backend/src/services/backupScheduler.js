@@ -1,13 +1,11 @@
 // services/backupScheduler.js
 import cron from "node-cron";
-import { exec } from "child_process";
-import { promisify } from "util";
 import fs from "fs";
 import path from "path";
 
-const execAsync = promisify(exec);
-
-const setupBackupScheduler = () => {
+const setupBackupScheduler = async () => {
+  const { mysqldump } = await import('mysqldump');
+  
   const backupDir = path.join(process.cwd(), "backups");
   if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
 
@@ -19,12 +17,18 @@ const setupBackupScheduler = () => {
       const filename = `daily_backup_${timestamp}.sql`;
       const filepath = path.join(backupDir, filename);
       
-     const cmd = `mysqldump -h${process.env.DB_HOST} -P${process.env.DB_PORT} -u${process.env.DB_USER} -p${process.env.DB_PASSWORD} ${process.env.DB_NAME} > "${filepath}"`;
-      await execAsync(cmd);
+      await mysqldump({
+        connection: {
+          host: process.env.DB_HOST,
+          user: process.env.DB_USER,
+          password: process.env.DB_PASSWORD,
+          database: process.env.DB_NAME,
+          port: parseInt(process.env.DB_PORT) || 3306,
+        },
+        dumpToFile: filepath,
+      });
       
       console.log(`✅ Daily backup created: ${filename}`);
-      
-      // Cleanup: Keep only last 7 daily backups
       cleanupOldBackups(backupDir, "daily", 7);
     } catch (err) {
       console.error("❌ Daily backup failed:", err.message);
@@ -39,12 +43,18 @@ const setupBackupScheduler = () => {
       const filename = `weekly_backup_${timestamp}.sql`;
       const filepath = path.join(backupDir, filename);
       
-      const cmd = `mysqldump -h${process.env.DB_HOST} -P${process.env.DB_PORT} -u${process.env.DB_USER} -p${process.env.DB_PASSWORD} ${process.env.DB_NAME} > "${filepath}"`;
-      await execAsync(cmd);
+      await mysqldump({
+        connection: {
+          host: process.env.DB_HOST,
+          user: process.env.DB_USER,
+          password: process.env.DB_PASSWORD,
+          database: process.env.DB_NAME,
+          port: parseInt(process.env.DB_PORT) || 3306,
+        },
+        dumpToFile: filepath,
+      });
       
       console.log(`✅ Weekly backup created: ${filename}`);
-      
-      // Cleanup: Keep only last 4 weekly backups
       cleanupOldBackups(backupDir, "weekly", 4);
     } catch (err) {
       console.error("❌ Weekly backup failed:", err.message);
@@ -64,7 +74,6 @@ const cleanupOldBackups = (dir, type, keepCount) => {
     }))
     .sort((a, b) => b.time - a.time);
 
-  // Delete old files
   files.slice(keepCount).forEach(file => {
     fs.unlinkSync(path.join(dir, file.name));
     console.log(`🗑️ Deleted old backup: ${file.name}`);
