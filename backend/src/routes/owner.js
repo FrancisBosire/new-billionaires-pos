@@ -109,21 +109,24 @@ router.get("/maintenance", (req, res) => {
 
 // ── 5. TOGGLE MAINTENANCE MODE (OWNER ONLY) ───────────────
 router.put("/maintenance", async (req, res) => {
-  const { isActive } = req.body; // true or false
+  const { isActive } = req.body;
+  
+  // Debug log
+  console.log("🔧 Maintenance toggle request received:", { isActive, type: typeof isActive });
   
   if (typeof isActive !== 'boolean') {
     return res.status(400).json({ error: "isActive must be a boolean." });
   }
 
   try {
-    // Update the database
     await db.query(
       "INSERT INTO settings (setting_key, setting_value) VALUES ('maintenance_mode', ?) ON DUPLICATE KEY UPDATE setting_value = ?",
       [isActive.toString(), isActive.toString()]
     );
     
-    // Update the global state instantly
     global.isMaintenanceMode = isActive;
+    
+    console.log(`✅ Maintenance mode ${isActive ? 'ENABLED' : 'DISABLED'}`);
     
     res.json({ 
       message: `Maintenance mode is now ${isActive ? 'ON' : 'OFF'}.`,

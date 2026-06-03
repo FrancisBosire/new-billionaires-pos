@@ -71,25 +71,34 @@ export default function OwnerDashboard() {
   };
 
   const handleToggleMaintenance = async () => {
-    const newState = !maintenanceMode;
-    try {
-      const res = await fetch(`${API_URL}/maintenance`, { 
-        method: "PUT", 
-        headers: getHeaders(),
-        body: JSON.stringify({ isActive: newState })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      
-      setMaintenanceMode(newState);
-      setMessage({ 
-        type: "success", 
-        text: `✅ Maintenance mode is now ${newState ? 'ON' : 'OFF'}` 
-      });
-    } catch (err) {
-      setMessage({ type: "error", text: err.message });
+  const newState = !maintenanceMode;
+  setMessage({ type: "", text: "" });
+  
+  try {
+    const res = await fetch(`${API_URL}/maintenance`, { 
+      method: "PUT", 
+      headers: {
+        ...getHeaders(),
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ isActive: newState })
+    });
+    
+    const data = await res.json();
+    
+    if (!res.ok) {
+      throw new Error(data.error || "Failed to toggle maintenance mode");
     }
-  };
+    
+    setMaintenanceMode(newState);
+    setMessage({ 
+      type: "success", 
+      text: `✅ Maintenance mode is now ${newState ? 'ON' : 'OFF'}` 
+    });
+  } catch (err) {
+    setMessage({ type: "error", text: err.message });
+  }
+};
 
   const handleDownload = (filename) => {
     fetch(`${API_URL}/backups/${filename}`, { headers: getHeaders() })
