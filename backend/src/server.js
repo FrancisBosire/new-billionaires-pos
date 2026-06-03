@@ -38,7 +38,18 @@ app.use("/api/ingredient-stock", verifyToken, authorizeRoles("owner", "sudo_admi
 app.use("/api/users", verifyToken, authorizeRoles("owner", "sudo_admin", "admin"), userRoutes);
 app.use("/api/menu", verifyToken, authorizeRoles("owner", "sudo_admin", "admin"), menuRoutes);
 app.use("/api/owner", verifyToken, authorizeRoles("owner"), ownerRoutes); // Owner-only routes (backup, system info, etc.)
-  setupBackupScheduler(); // Initialize backup scheduler  (Owner feature)
+  
+// Initialize Global Maintenance Mode State
+db.query("SELECT setting_value FROM settings WHERE setting_key = 'maintenance_mode'", (err, results) => {
+  if (!err && results.length > 0) {
+    global.isMaintenanceMode = results[0].setting_value === 'true';
+    console.log(`🔒 Maintenance Mode initialized: ${global.isMaintenanceMode ? 'ON' : 'OFF'}`);
+  } else {
+    global.isMaintenanceMode = false;
+    console.log('🔒 Maintenance Mode initialized: OFF (Default)');
+  }
+});
+setupBackupScheduler(); // Initialize backup scheduler  (Owner feature)
   app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
   

@@ -98,8 +98,14 @@ router.get("/:id", async (req, res) => {
 ========================= */
 
 router.post("/", async (req, res) => {
-  const { items, paymentMethod, userId } = req.body;
+  // 🔒 MAINTENANCE MODE CHECK
+  if (global.isMaintenanceMode && req.user.role !== 'owner') {
+    return res.status(503).json({ 
+      error: "System is currently under maintenance. Please try again later or contact the Owner." 
+    });
+  }
 
+  const { items, paymentMethod, userId } = req.body;
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ message: "Cart items are required" });
   }

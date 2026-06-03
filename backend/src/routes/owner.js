@@ -102,4 +102,37 @@ router.get("/backups/:filename", (req, res) => {
   }
 });
 
+// ── GET MAINTENANCE MODE STATUS ───────────────────────────
+router.get("/maintenance", (req, res) => {
+  res.json({ isActive: global.isMaintenanceMode || false });
+});
+
+// ── 5. TOGGLE MAINTENANCE MODE (OWNER ONLY) ───────────────
+router.put("/maintenance", async (req, res) => {
+  const { isActive } = req.body; // true or false
+  
+  if (typeof isActive !== 'boolean') {
+    return res.status(400).json({ error: "isActive must be a boolean." });
+  }
+
+  try {
+    // Update the database
+    await db.query(
+      "INSERT INTO settings (setting_key, setting_value) VALUES ('maintenance_mode', ?) ON DUPLICATE KEY UPDATE setting_value = ?",
+      [isActive.toString(), isActive.toString()]
+    );
+    
+    // Update the global state instantly
+    global.isMaintenanceMode = isActive;
+    
+    res.json({ 
+      message: `Maintenance mode is now ${isActive ? 'ON' : 'OFF'}.`,
+      isActive 
+    });
+  } catch (err) {
+    console.error("Maintenance toggle error:", err);
+    res.status(500).json({ error: "Failed to update maintenance mode." });
+  }
+});
+
 export default router;

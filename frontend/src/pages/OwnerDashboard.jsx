@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { FaDatabase, FaServer, FaUsers, FaDownload, FaClock, FaPlus, FaShieldAlt } from "react-icons/fa";
+import { FaDatabase, FaServer, FaUsers, FaDownload, FaClock, FaPlus, FaShieldAlt, FaTools } from "react-icons/fa";
 
 const API_URL = `${import.meta.env.VITE_API_URL}/owner`;
 
@@ -25,19 +25,26 @@ const formatUptime = (seconds) => {
 export default function OwnerDashboard() {
   const [info, setInfo] = useState(null);
   const [backups, setBackups] = useState([]);
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [backuping, setBackuping] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
 
   const fetchData = async () => {
     try {
-      const [infoRes, backupRes] = await Promise.all([
+      const [infoRes, backupRes, maintenanceRes] = await Promise.all([
         fetch(`${API_URL}/info`, { headers: getHeaders() }),
         fetch(`${API_URL}/backups`, { headers: getHeaders() }),
+        fetch(`${API_URL}/maintenance`, { headers: getHeaders() }),
       ]);
-      if (!infoRes.ok || !backupRes.ok) throw new Error("Failed to load data");
+      
+      if (!infoRes.ok || !backupRes.ok || !maintenanceRes.ok) {
+        throw new Error("Failed to load data");
+      }
+      
       setInfo(await infoRes.json());
       setBackups((await backupRes.json()).backups);
+      setMaintenanceMode((await maintenanceRes.json()).isActive);
     } catch (err) {
       setMessage({ type: "error", text: err.message });
     } finally {
@@ -63,12 +70,28 @@ export default function OwnerDashboard() {
     }
   };
 
+  const handleToggleMaintenance = async () => {
+    const newState = !maintenanceMode;
+    try {
+      const res = await fetch(`${API_URL}/maintenance`, { 
+        method: "PUT", 
+        headers: getHeaders(),
+        body: JSON.stringify({ isActive: newState })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      
+      setMaintenanceMode(newState);
+      setMessage({ 
+        type: "success", 
+        text: `✅ Maintenance mode is now ${newState ? 'ON' : 'OFF'}` 
+      });
+    } catch (err) {
+      setMessage({ type: "error", text: err.message });
+    }
+  };
+
   const handleDownload = (filename) => {
-    // Create a hidden link to trigger the download
-    const link = document.createElement("a");
-    link.href = `${API_URL}/backups/${filename}`;
-    // We need to pass the auth token for the download request
-    // Since fetch is easier for auth headers, we do this:
     fetch(`${API_URL}/backups/${filename}`, { headers: getHeaders() })
       .then(res => res.blob())
       .then(blob => {
@@ -106,6 +129,49 @@ export default function OwnerDashboard() {
           borderRadius: 8, padding: "12px 16px", marginBottom: 20 
         }}>{message.text}</div>
       )}
+
+      {/* SYSTEM CONTROL CARD */}
+      <div style={{ 
+        background: "#fff", 
+        border: maintenanceMode ? "2px solid #dc2626" : "1px solid #e0ddd5", 
+        borderRadius: 10, 
+        padding: "24px", 
+        marginBottom: 24,
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        boxShadow: maintenanceMode ? "0 0 20px rgba(220, 38, 38, 0.2)" : "none"
+      }}>
+        <div>
+          <h3 style={{ margin: "0 0 6px", fontSize: 16, fontWeight: 700, display: "flex", alignItems: "center", gap: 10 }}>
+            <FaTools style={{ color: maintenanceMode ? "#dc2626" : "#6b7280" }} /> 
+            System Maintenance Mode
+          </h3>
+          <p style={{ margin: 0, color: "#6b7280", fontSize: 14 }}>
+            {maintenanceMode 
+              ? "🔒 POS is frozen. Cashiers cannot make sales." 
+              : "✅ System is live. Cashiers can process transactions normally."}
+          </p>
+        </div>
+
+        <button 
+          onClick={handleToggleMaintenance}
+          style={{ 
+            padding: "12px 24px", 
+            borderRadius: 8, 
+            border: "none", 
+            fontWeight: 700,
+            cursor: "pointer",
+            fontSize: 14,
+            background: maintenanceMode ? "#dc2626" : "#10b981",
+            color: "white",
+            transition: "all 0.2s",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.1)"
+          }}
+        >
+          {maintenanceMode ? "🔓 DISABLE MAINTENANCE" : "🔧 ENABLE MAINTENANCE"}
+        </button>
+      </div>
 
       {/* SYSTEM INFO CARDS */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 16, marginBottom: 24 }}>
