@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { FaMinus, FaPlus, FaTrash } from "react-icons/fa";
+import { FaMinus, FaPlus, FaTrash, FaLock } from "react-icons/fa";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 const PRODUCTS_API_URL = `${API_BASE_URL}/products`;
 const MENU_API_URL = `${API_BASE_URL}/menu`;
 const SALES_API_URL = `${API_BASE_URL}/sales`;
+const OWNER_API_URL = `${API_BASE_URL}/owner`;
 
 const getAuthHeaders = () => ({
   "Content-Type": "application/json",
@@ -33,8 +34,8 @@ function Sales({ currentUser }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-const [successMessage, setSuccessMessage] = useState("");
-const [maintenanceError, setMaintenanceError] = useState(null);
+  const [successMessage, setSuccessMessage] = useState("");
+  const [maintenanceMode, setMaintenanceMode] = useState(false);
 
   const refreshProducts = async () => {
     const response = await fetch(PRODUCTS_API_URL, { headers: getAuthHeaders() });
@@ -42,6 +43,29 @@ const [maintenanceError, setMaintenanceError] = useState(null);
     const data = await response.json();
     setProducts(data);
   };
+
+  // Check maintenance mode on load
+  useEffect(() => {
+    const checkMaintenanceMode = async () => {
+      try {
+        const response = await fetch(`${OWNER_API_URL}/maintenance`, { 
+          headers: getAuthHeaders() 
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setMaintenanceMode(data.isActive || false);
+        }
+      } catch (err) {
+        console.error("Failed to check maintenance mode:", err);
+      }
+    };
+
+    checkMaintenanceMode();
+    
+    // Poll every 10 seconds to check if maintenance mode changed
+    const interval = setInterval(checkMaintenanceMode, 10000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     let isActive = true;
@@ -56,11 +80,20 @@ const [maintenanceError, setMaintenanceError] = useState(null);
           setMenuItems(Array.isArray(menuData) ? menuData : []);
         }
       })
-      .catch((error) => { if (isActive) setErrorMessage(error.message); })
+      .catch((error) => { 
+        if (isActive) {
+          // Don't show error if it's a maintenance mode issue
+          if (error.message.includes("forbidden") || error.message.includes("permission")) {
+            // Silently fail - maintenance mode will handle the UI
+          } else {
+            setErrorMessage(error.message);
+          }
+        }
+      })
       .finally(() => { if (isActive) setIsLoading(false); });
 
     return () => { isActive = false; };
-  }, []);
+  }, [maintenanceMode]);
 
   useEffect(() => {
     if (!successMessage) return;
@@ -74,7 +107,6 @@ const [maintenanceError, setMaintenanceError] = useState(null);
     return () => clearTimeout(timer);
   }, [errorMessage]);
 
-  // Filter based on active tab
   const filteredProducts = products.filter((p) =>
     p.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -85,8 +117,9 @@ const [maintenanceError, setMaintenanceError] = useState(null);
   const cartTotal = cartItems.reduce((total, item) => total + item.price * item.quantity, 0);
   const formatMoney = (amount) => `KES ${Number(amount).toFixed(2)}`;
 
-  // Add bar product to cart (stock checked)
   const addProductToCart = (product) => {
+    if (maintenanceMode) return;
+    
     const stock = Number(product.stock_quantity ?? product.stock);
     setErrorMessage(""); setSuccessMessage("");
 
@@ -115,8 +148,9 @@ const [maintenanceError, setMaintenanceError] = useState(null);
     });
   };
 
-  // Add food menu item to cart (no stock limit)
   const addMenuToCart = (menuItem) => {
+    if (maintenanceMode) return;
+    
     setErrorMessage(""); setSuccessMessage("");
 
     setCartItems((currentItems) => {
@@ -139,6 +173,8 @@ const [maintenanceError, setMaintenanceError] = useState(null);
   };
 
   const increaseQuantity = (id) => {
+    if (maintenanceMode) return;
+    
     setErrorMessage(""); setSuccessMessage("");
     setCartItems((currentItems) =>
       currentItems.map((item) => {
@@ -153,6 +189,8 @@ const [maintenanceError, setMaintenanceError] = useState(null);
   };
 
   const decreaseQuantity = (id) => {
+    if (maintenanceMode) return;
+    
     setErrorMessage(""); setSuccessMessage("");
     setCartItems((currentItems) =>
       currentItems
@@ -162,62 +200,62 @@ const [maintenanceError, setMaintenanceError] = useState(null);
   };
 
   const removeFromCart = (id) => {
+    if (maintenanceMode) return;
+    
     setErrorMessage(""); setSuccessMessage("");
     setCartItems((currentItems) => currentItems.filter((item) => item.id !== id));
   };
 
   const completeSale = async () => {
-  setErrorMessage(""); setSuccessMessage("");
+    setErrorMessage(""); setSuccessMessage("");
 
-  // Block if maintenance mode is active
-  if (maintenanceError) {
-    return;
-  }
-
-  if (cartItems.length === 0) {
-    setErrorMessage("Add at least one item before checkout");
-    return;
-  }
-
-  try {
-    setIsSubmitting(true);
-    const response = await fetch(SALES_API_URL, {
-      method: "POST",
-      headers: getAuthHeaders(),
-      body: JSON.stringify({
-        paymentMethod,
-        userId: currentUser.id,
-        items: cartItems.map((item) => ({
-          productId: item.productId,
-          quantity: item.quantity,
-          type: item.type,
-        })),
-      }),
-    });
-
-    const data = await response.json();
-    
-    // Check for maintenance mode (503 status)
-    if (response.status === 503) {
-      setMaintenanceError({
-        title: data.error || "SYSTEM UNDER MAINTENANCE",
-        message: data.message || "The POS system is temporarily locked by the Owner.",
-      });
-      setIsSubmitting(false);
+    if (maintenanceMode) {
+      setErrorMessage("System is under maintenance. Sales are disabled.");
       return;
     }
-    
-    if (!response.ok) throw new Error(data.message || "Failed to complete sale");
 
-    setSuccessMessage(`Sale #${data.saleId} completed: ${formatMoney(data.totalAmount)} via ${paymentMethod}`);
-    setCartItems([]);
-    await refreshProducts();
-  } catch (error) {
-    setErrorMessage(error.message);
-  } finally {
-    setIsSubmitting(false);
-  }
-};
+    if (cartItems.length === 0) {
+      setErrorMessage("Add at least one item before checkout");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const response = await fetch(SALES_API_URL, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          paymentMethod,
+          userId: currentUser.id,
+          items: cartItems.map((item) => ({
+            productId: item.productId,
+            quantity: item.quantity,
+            type: item.type,
+          })),
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (response.status === 503) {
+        setMaintenanceMode(true);
+        setErrorMessage("SYSTEM UNDER MAINTENANCE - Sales are temporarily disabled by the Owner.");
+        setIsSubmitting(false);
+        return;
+      }
+      
+      if (!response.ok) throw new Error(data.message || "Failed to complete sale");
+
+      setSuccessMessage(`Sale #${data.saleId} completed: ${formatMoney(data.totalAmount)} via ${paymentMethod}`);
+      setCartItems([]);
+      await refreshProducts();
+    } catch (error) {
+      setErrorMessage(error.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="page-shell sales-page">
       <div style={pageHeaderStyle}>
@@ -229,72 +267,71 @@ const [maintenanceError, setMaintenanceError] = useState(null);
         </div>
       </div>
 
-      {/* MAINTENANCE MODE ALERT - PERSISTENT */}
-{maintenanceError && (
-  <div style={maintenanceAlertStyle}>
-    <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "12px" }}>
-      <div style={{
-        fontSize: "40px",
-        background: "white",
-        width: "56px",
-        height: "56px",
-        borderRadius: "50%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        flexShrink: 0
-      }}>
-        🔧
-      </div>
-      <div style={{ flex: 1 }}>
-        <h2 style={{ 
-          margin: 0, 
-          color: "white", 
-          fontSize: "20px",
-          fontWeight: "700",
-          textTransform: "uppercase",
-          letterSpacing: "0.5px"
-        }}>
-          {maintenanceError.title}
-        </h2>
-        <p style={{ 
-          margin: "6px 0 0", 
-          color: "#fecaca", 
-          fontSize: "14px",
-          lineHeight: "1.5"
-        }}>
-          {maintenanceError.message}
-        </p>
-      </div>
-    </div>
-    
-    <div style={{
-      background: "rgba(0,0,0,0.3)",
-      borderRadius: "8px",
-      padding: "12px 16px",
-      marginTop: "12px",
-      border: "1px solid rgba(255,255,255,0.1)"
-    }}>
-      <p style={{ 
-        margin: 0, 
-        color: "#fee2e2", 
-        fontSize: "13px",
-        fontWeight: "600",
-        textAlign: "center"
-      }}>
-        ⏳ Please contact the Owner to restore system access. Sales are temporarily disabled.
-      </p>
-    </div>
-  </div>
-)}
+      {/* MAINTENANCE MODE ALERT */}
+      {maintenanceMode && (
+        <div style={maintenanceAlertStyle}>
+          <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "12px" }}>
+            <div style={{
+              fontSize: "40px",
+              background: "white",
+              width: "56px",
+              height: "56px",
+              borderRadius: "50%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0
+            }}>
+              <FaLock style={{ color: "#dc2626", fontSize: "28px" }} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <h2 style={{ 
+                margin: 0, 
+                color: "white", 
+                fontSize: "20px",
+                fontWeight: "700",
+                textTransform: "uppercase",
+                letterSpacing: "0.5px"
+              }}>
+                🔒 System Under Maintenance
+              </h2>
+              <p style={{ 
+                margin: "6px 0 0", 
+                color: "#fecaca", 
+                fontSize: "14px",
+                lineHeight: "1.5"
+              }}>
+                The POS system is temporarily locked by the Owner. All sales are disabled. Please wait for the Owner to restore normal operations.
+              </p>
+            </div>
+          </div>
+          
+          <div style={{
+            background: "rgba(0,0,0,0.3)",
+            borderRadius: "8px",
+            padding: "12px 16px",
+            marginTop: "12px",
+            border: "1px solid rgba(255,255,255,0.1)"
+          }}>
+            <p style={{ 
+              margin: 0, 
+              color: "#fee2e2", 
+              fontSize: "13px",
+              fontWeight: "600",
+              textAlign: "center"
+            }}>
+              ⏳ Contact the Owner to restore system access
+            </p>
+          </div>
+        </div>
+      )}
 
-{errorMessage && <div style={errorStyle}>{errorMessage}</div>}
-{successMessage && <div style={successStyle}>{successMessage}</div>}
+      {errorMessage && <div style={errorStyle}>{errorMessage}</div>}
+      {successMessage && <div style={successStyle}>{successMessage}</div>}
 
-      <div style={layoutStyle}>
+      <div style={{...layoutStyle, opacity: maintenanceMode ? 0.4 : 1, pointerEvents: maintenanceMode ? 'none' : 'auto', filter: maintenanceMode ? 'blur(2px)' : 'none', transition: 'all 0.3s ease'}}>
         {/* PRODUCTS PANEL */}
         <section style={productsPanelStyle}>
-          {/* Search */}
           <div style={panelHeaderStyle}>
             <input
               type="text"
@@ -302,37 +339,38 @@ const [maintenanceError, setMaintenanceError] = useState(null);
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); }}
               style={searchInputStyle}
+              disabled={maintenanceMode}
             />
           </div>
 
-          {/* Tabs */}
           <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
             {[
               { key: "bar", label: "🍺 Bar Products" },
               { key: "food", label: "🍽️ Food Menu" },
             ].map((tab) => (
               <button key={tab.key} onClick={() => { setActiveTab(tab.key); setSearchTerm(""); }}
+                disabled={maintenanceMode}
                 style={{
-                  padding: "8px 16px", borderRadius: "7px", fontWeight: "600", fontSize: "13px", cursor: "pointer",
+                  padding: "8px 16px", borderRadius: "7px", fontWeight: "600", fontSize: "13px",
                   background: activeTab === tab.key ? "#1f2a36" : "#eef1f5",
                   color: activeTab === tab.key ? "#f4c85a" : "#4a4a4a",
                   border: activeTab === tab.key ? "1px solid #1f2a36" : "1px solid #cbd5e1",
                   transition: "all 0.15s",
+                  cursor: maintenanceMode ? "not-allowed" : "pointer",
+                  opacity: maintenanceMode ? 0.5 : 1
                 }}>
                 {tab.label}
               </button>
             ))}
           </div>
 
-          {/* Product / Menu list */}
           <div style={productListStyle}>
             {isLoading && <div style={emptyPanelStyle}>Loading...</div>}
 
-            {/* BAR PRODUCTS */}
             {!isLoading && activeTab === "bar" && (
               <>
                 {filteredProducts.map((product) => (
-                  <div key={product.id} style={productRowStyle}>
+                  <div key={product.id} style={{...productRowStyle, opacity: maintenanceMode ? 0.5 : 1}}>
                     <div>
                       <strong>{product.name}</strong>
                       <p style={productMetaStyle}>
@@ -341,7 +379,13 @@ const [maintenanceError, setMaintenanceError] = useState(null);
                     </div>
                     <div style={productActionStyle}>
                       <strong>{formatMoney(product.selling_price ?? product.price)}</strong>
-                      <button onClick={() => addProductToCart(product)} style={addButtonStyle}>Add</button>
+                      <button 
+                        onClick={() => addProductToCart(product)} 
+                        style={{...addButtonStyle, opacity: maintenanceMode ? 0.3 : 1, cursor: maintenanceMode ? 'not-allowed' : 'pointer'}}
+                        disabled={maintenanceMode}
+                      >
+                        Add
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -349,18 +393,23 @@ const [maintenanceError, setMaintenanceError] = useState(null);
               </>
             )}
 
-            {/* FOOD MENU */}
             {!isLoading && activeTab === "food" && (
               <>
                 {filteredMenu.map((item) => (
-                  <div key={item.id} style={productRowStyle}>
+                  <div key={item.id} style={{...productRowStyle, opacity: maintenanceMode ? 0.5 : 1}}>
                     <div>
                       <strong>{item.name}</strong>
                       <p style={productMetaStyle}>Food</p>
                     </div>
                     <div style={productActionStyle}>
                       <strong>{formatMoney(item.price)}</strong>
-                      <button onClick={() => addMenuToCart(item)} style={{ ...addButtonStyle, background: "#c9a84c", color: "#1a1a2e" }}>Add</button>
+                      <button 
+                        onClick={() => addMenuToCart(item)} 
+                        style={{ ...addButtonStyle, background: "#c9a84c", color: "#1a1a2e", opacity: maintenanceMode ? 0.3 : 1, cursor: maintenanceMode ? 'not-allowed' : 'pointer'}}
+                        disabled={maintenanceMode}
+                      >
+                        Add
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -383,7 +432,7 @@ const [maintenanceError, setMaintenanceError] = useState(null);
           {cartItems.length > 0 && (
             <div style={cartListStyle}>
               {cartItems.map((item) => (
-                <div key={item.id} style={cartItemStyle}>
+                <div key={item.id} style={{...cartItemStyle, opacity: maintenanceMode ? 0.5 : 1}}>
                   <div>
                     <strong>{item.name}</strong>
                     <p style={productMetaStyle}>
@@ -394,10 +443,28 @@ const [maintenanceError, setMaintenanceError] = useState(null);
                     </p>
                   </div>
                   <div style={quantityControlsStyle}>
-                    <button onClick={() => decreaseQuantity(item.id)} style={quantityButtonStyle}><FaMinus /></button>
+                    <button 
+                      onClick={() => decreaseQuantity(item.id)} 
+                      style={{...quantityButtonStyle, opacity: maintenanceMode ? 0.3 : 1, cursor: maintenanceMode ? 'not-allowed' : 'pointer'}}
+                      disabled={maintenanceMode}
+                    >
+                      <FaMinus />
+                    </button>
                     <span style={quantityValueStyle}>{item.quantity}</span>
-                    <button onClick={() => increaseQuantity(item.id)} style={quantityButtonStyle}><FaPlus /></button>
-                    <button onClick={() => removeFromCart(item.id)} style={removeButtonStyle}><FaTrash /></button>
+                    <button 
+                      onClick={() => increaseQuantity(item.id)} 
+                      style={{...quantityButtonStyle, opacity: maintenanceMode ? 0.3 : 1, cursor: maintenanceMode ? 'not-allowed' : 'pointer'}}
+                      disabled={maintenanceMode}
+                    >
+                      <FaPlus />
+                    </button>
+                    <button 
+                      onClick={() => removeFromCart(item.id)} 
+                      style={{...removeButtonStyle, opacity: maintenanceMode ? 0.3 : 1, cursor: maintenanceMode ? 'not-allowed' : 'pointer'}}
+                      disabled={maintenanceMode}
+                    >
+                      <FaTrash />
+                    </button>
                   </div>
                 </div>
               ))}
@@ -410,32 +477,43 @@ const [maintenanceError, setMaintenanceError] = useState(null);
           </div>
 
           <div style={paymentGroupStyle}>
-            <button onClick={() => setPaymentMethod("cash")} style={paymentMethod === "cash" ? activePaymentButtonStyle : paymentButtonStyle}>Cash</button>
-            <button onClick={() => setPaymentMethod("mpesa")} style={paymentMethod === "mpesa" ? activePaymentButtonStyle : paymentButtonStyle}>M-Pesa</button>
+            <button 
+              onClick={() => setPaymentMethod("cash")} 
+              style={paymentMethod === "cash" ? activePaymentButtonStyle : paymentButtonStyle}
+              disabled={maintenanceMode}
+            >
+              Cash
+            </button>
+            <button 
+              onClick={() => setPaymentMethod("mpesa")} 
+              style={paymentMethod === "mpesa" ? activePaymentButtonStyle : paymentButtonStyle}
+              disabled={maintenanceMode}
+            >
+              M-Pesa
+            </button>
           </div>
 
           <button
-  onClick={completeSale}
-  disabled={cartItems.length === 0 || isSubmitting || !!maintenanceError}
-  style={{ 
-    ...checkoutButtonStyle, 
-    opacity: cartItems.length === 0 || isSubmitting || maintenanceError ? 0.6 : 1,
-    cursor: maintenanceError ? "not-allowed" : "pointer",
-    background: maintenanceError ? "#6b7280" : "#1f2a36"
-  }}
->
-  {maintenanceError ? "🔒 System Locked" : isSubmitting ? "Completing..." : "Complete Sale"}
-</button>
+            onClick={completeSale}
+            disabled={cartItems.length === 0 || isSubmitting || maintenanceMode}
+            style={{ 
+              ...checkoutButtonStyle, 
+              opacity: cartItems.length === 0 || isSubmitting || maintenanceMode ? 0.6 : 1,
+              cursor: maintenanceMode ? "not-allowed" : "pointer",
+              background: maintenanceMode ? "#6b7280" : "#1f2a36"
+            }}
+          >
+            {maintenanceError ? "🔒 System Locked" : isSubmitting ? "Completing..." : "Complete Sale"}
+          </button>
         </aside>
       </div>
 
       <style>{`
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.9; }
-  }
-`}</style>
-
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.9; }
+        }
+      `}</style>
     </div>
   );
 }
