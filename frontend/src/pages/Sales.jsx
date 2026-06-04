@@ -44,7 +44,6 @@ function Sales({ currentUser }) {
     setProducts(data);
   };
 
-  // Check maintenance mode on load
   useEffect(() => {
     const checkMaintenanceMode = async () => {
       try {
@@ -61,8 +60,6 @@ function Sales({ currentUser }) {
     };
 
     checkMaintenanceMode();
-    
-    // Poll every 10 seconds to check if maintenance mode changed
     const interval = setInterval(checkMaintenanceMode, 10000);
     return () => clearInterval(interval);
   }, []);
@@ -82,10 +79,7 @@ function Sales({ currentUser }) {
       })
       .catch((error) => { 
         if (isActive) {
-          // Don't show error if it's a maintenance mode issue
-          if (error.message.includes("forbidden") || error.message.includes("permission")) {
-            // Silently fail - maintenance mode will handle the UI
-          } else {
+          if (!error.message.includes("forbidden") && !error.message.includes("permission")) {
             setErrorMessage(error.message);
           }
         }
@@ -267,7 +261,6 @@ function Sales({ currentUser }) {
         </div>
       </div>
 
-      {/* MAINTENANCE MODE ALERT */}
       {maintenanceMode && (
         <div style={maintenanceAlertStyle}>
           <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "12px" }}>
@@ -330,7 +323,6 @@ function Sales({ currentUser }) {
       {successMessage && <div style={successStyle}>{successMessage}</div>}
 
       <div style={{...layoutStyle, opacity: maintenanceMode ? 0.4 : 1, pointerEvents: maintenanceMode ? 'none' : 'auto', filter: maintenanceMode ? 'blur(2px)' : 'none', transition: 'all 0.3s ease'}}>
-        {/* PRODUCTS PANEL */}
         <section style={productsPanelStyle}>
           <div style={panelHeaderStyle}>
             <input
@@ -423,7 +415,6 @@ function Sales({ currentUser }) {
           </div>
         </section>
 
-        {/* CART PANEL */}
         <aside style={cartPanelStyle}>
           <h3>Current Cart</h3>
 
@@ -503,7 +494,7 @@ function Sales({ currentUser }) {
               background: maintenanceMode ? "#6b7280" : "#1f2a36"
             }}
           >
-            {maintenanceError ? "🔒 System Locked" : isSubmitting ? "Completing..." : "Complete Sale"}
+            {maintenanceMode ? "🔒 System Locked" : isSubmitting ? "Completing..." : "Complete Sale"}
           </button>
         </aside>
       </div>
