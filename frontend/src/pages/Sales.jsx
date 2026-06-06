@@ -6,7 +6,6 @@ const API_BASE_URL = import.meta.env.VITE_API_URL;
 const PRODUCTS_API_URL = `${API_BASE_URL}/products`;
 const MENU_API_URL = `${API_BASE_URL}/menu`;
 const SALES_API_URL = `${API_BASE_URL}/sales`;
-const OWNER_API_URL = `${API_BASE_URL}/owner`;
 
 const getAuthHeaders = () => ({
   "Content-Type": "application/json",
@@ -37,7 +36,9 @@ function Sales({ currentUser }) {
   const [successMessage, setSuccessMessage] = useState("");
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [productsLoadError, setProductsLoadError] = useState("");
-  const [isCheckingMaintenance, setIsCheckingMaintenance] = useState(true);
+
+  // 🔑 KEY FIX: Only lock the UI if maintenance is ON AND the user is NOT the Owner
+  const isMaintenanceActive = maintenanceMode && currentUser.role !== 'owner';
 
   const refreshProducts = async () => {
     try {
@@ -51,45 +52,33 @@ function Sales({ currentUser }) {
     }
   };
 
-  // Check maintenance mode FIRST before anything else
+  // Check maintenance mode ONCE on mount
   useEffect(() => {
     const checkMaintenanceMode = async () => {
       try {
-        console.log("🔍 Checking maintenance mode...");
-        setIsCheckingMaintenance(true);
-        
-        const response = await fetch(`${OWNER_API_URL}/maintenance`, { 
+        const response = await fetch(`${API_BASE_URL}/maintenance-status`, { 
           headers: getAuthHeaders() 
         });
         
         if (response.ok) {
           const data = await response.json();
-          const isActive = data.isActive === true;
-          console.log("🔒 Maintenance mode:", isActive ? "ON ✅" : "OFF ❌");
-          setMaintenanceMode(isActive);
-        } else {
-          console.error("Maintenance API failed:", response.status);
-          setMaintenanceMode(false);
+          setMaintenanceMode(data.isActive === true);
         }
       } catch (err) {
         console.error("Error checking maintenance:", err);
         setMaintenanceMode(false);
-      } finally {
-        setIsCheckingMaintenance(false);
       }
     };
 
     checkMaintenanceMode();
     
-    // Poll every 10 seconds
-    const interval = setInterval(checkMaintenanceMode, 10000);
+    // Poll silently every 30 seconds
+    const interval = setInterval(checkMaintenanceMode, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  // Load products and menu AFTER maintenance check
+  // Load products and menu
   useEffect(() => {
-    if (isCheckingMaintenance) return; // Wait for maintenance check
-    
     let isActive = true;
     setProductsLoadError("");
 
@@ -109,10 +98,14 @@ function Sales({ currentUser }) {
           setProductsLoadError(error.message);
         }
       })
-      .finally(() => { if (isActive) setIsLoading(false); });
+      .finally(() => { 
+        if (isActive) {
+          setIsLoading(false);
+        }
+      });
 
     return () => { isActive = false; };
-  }, [isCheckingMaintenance]); // Only run after maintenance check
+  }, []);
 
   useEffect(() => {
     if (!successMessage) return;
@@ -137,7 +130,7 @@ function Sales({ currentUser }) {
   const formatMoney = (amount) => `KES ${Number(amount).toFixed(2)}`;
 
   const addProductToCart = (product) => {
-    if (maintenanceMode) {
+    if (isMaintenanceActive) {
       setErrorMessage("System is under maintenance. Cannot add items to cart.");
       return;
     }
@@ -171,7 +164,7 @@ function Sales({ currentUser }) {
   };
 
   const addMenuToCart = (menuItem) => {
-    if (maintenanceMode) {
+    if (isMaintenanceActive) {
       setErrorMessage("System is under maintenance. Cannot add items to cart.");
       return;
     }
@@ -198,7 +191,7 @@ function Sales({ currentUser }) {
   };
 
   const increaseQuantity = (id) => {
-    if (maintenanceMode) return;
+    if (isMaintenanceActive) return;
     
     setErrorMessage(""); setSuccessMessage("");
     setCartItems((currentItems) =>
@@ -214,7 +207,7 @@ function Sales({ currentUser }) {
   };
 
   const decreaseQuantity = (id) => {
-    if (maintenanceMode) return;
+    if (isMaintenanceActive) return;
     
     setErrorMessage(""); setSuccessMessage("");
     setCartItems((currentItems) =>
@@ -225,7 +218,7 @@ function Sales({ currentUser }) {
   };
 
   const removeFromCart = (id) => {
-    if (maintenanceMode) return;
+    if (isMaintenanceActive) return;
     
     setErrorMessage(""); setSuccessMessage("");
     setCartItems((currentItems) => currentItems.filter((item) => item.id !== id));
@@ -234,7 +227,7 @@ function Sales({ currentUser }) {
   const completeSale = async () => {
     setErrorMessage(""); setSuccessMessage("");
 
-    if (maintenanceMode) {
+    if (isMaintenanceActive) {
       setErrorMessage("System is under maintenance. Sales are disabled.");
       return;
     }
@@ -281,8 +274,8 @@ function Sales({ currentUser }) {
     }
   };
 
-  // Show loading screen while checking maintenance
-  if (isCheckingMaintenance) {
+  // Show loading screen ONLY on initial page load
+  if (isLoading) {
     return (
       <div style={{
         display: "flex",
@@ -292,21 +285,10 @@ function Sales({ currentUser }) {
         background: "#f5f5f5"
       }}>
         <div style={{ textAlign: "center" }}>
-          <div style={{
-            fontSize: "48px",
-            marginBottom: "16px",
-            animation: "spin 1s linear infinite"
-          }}>
-            ⏳
-          </div>
-          <p style={{ fontSize: "16px", color: "#666" }}>Checking system status...</p>
+          <div style={{ fontSize: "48px", marginBottom: "16px", animation: "spin 1s linear infinite" }}></div>
+          <p style={{ fontSize: "16px", color: "#666" }}>Loading POS system...</p>
         </div>
-        <style>{`
-          @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-          }
-        `}</style>
+        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
@@ -317,64 +299,29 @@ function Sales({ currentUser }) {
         <div>
           <h1 style={titleStyle}>POS Sales</h1>
           <p style={subtitleStyle}>
-            {currentUser.role === "cashier" ? "Cashier checkout workspace" : "Admin checkout workspace"}
+            {currentUser.role === "cashier" ? "Cashier checkout workspace" : currentUser.role === "owner" ? "Owner checkout workspace (Maintenance Bypass Active)" : "Admin checkout workspace"}
           </p>
         </div>
       </div>
 
-      {/* MAINTENANCE MODE ALERT - SHOWS IMMEDIATELY */}
-      {maintenanceMode && (
+      {/* MAINTENANCE MODE ALERT - ONLY SHOWS FOR NON-OWNERS */}
+      {isMaintenanceActive && (
         <div style={maintenanceAlertStyle}>
           <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "12px" }}>
-            <div style={{
-              fontSize: "40px",
-              background: "white",
-              width: "56px",
-              height: "56px",
-              borderRadius: "50%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0
-            }}>
+            <div style={{ fontSize: "40px", background: "white", width: "56px", height: "56px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
               <FaLock style={{ color: "#dc2626", fontSize: "28px" }} />
             </div>
             <div style={{ flex: 1 }}>
-              <h2 style={{ 
-                margin: 0, 
-                color: "white", 
-                fontSize: "20px",
-                fontWeight: "700",
-                textTransform: "uppercase",
-                letterSpacing: "0.5px"
-              }}>
+              <h2 style={{ margin: 0, color: "white", fontSize: "20px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>
                 🔒 SYSTEM UNDER MAINTENANCE
               </h2>
-              <p style={{ 
-                margin: "6px 0 0", 
-                color: "#fecaca", 
-                fontSize: "14px",
-                lineHeight: "1.5"
-              }}>
+              <p style={{ margin: "6px 0 0", color: "#fecaca", fontSize: "14px", lineHeight: "1.5" }}>
                 The POS system is temporarily locked by the Owner. All sales are disabled. Please wait for the Owner to restore normal operations.
               </p>
             </div>
           </div>
-          
-          <div style={{
-            background: "rgba(0,0,0,0.3)",
-            borderRadius: "8px",
-            padding: "12px 16px",
-            marginTop: "12px",
-            border: "1px solid rgba(255,255,255,0.1)"
-          }}>
-            <p style={{ 
-              margin: 0, 
-              color: "#fee2e2", 
-              fontSize: "13px",
-              fontWeight: "600",
-              textAlign: "center"
-            }}>
+          <div style={{ background: "rgba(0,0,0,0.3)", borderRadius: "8px", padding: "12px 16px", marginTop: "12px", border: "1px solid rgba(255,255,255,0.1)" }}>
+            <p style={{ margin: 0, color: "#fee2e2", fontSize: "13px", fontWeight: "600", textAlign: "center" }}>
               ⏳ Contact the Owner to restore system access
             </p>
           </div>
@@ -384,12 +331,12 @@ function Sales({ currentUser }) {
       {errorMessage && <div style={errorStyle}>{errorMessage}</div>}
       {successMessage && <div style={successStyle}>{successMessage}</div>}
 
-      {/* WRAPPER WITH BLUR */}
+      {/* WRAPPER WITH BLUR - ONLY APPLIES TO NON-OWNERS */}
       <div style={{
         ...layoutStyle,
-        opacity: maintenanceMode ? 0.3 : 1,
-        pointerEvents: maintenanceMode ? 'none' : 'auto',
-        filter: maintenanceMode ? 'blur(3px)' : 'none',
+        opacity: isMaintenanceActive ? 0.3 : 1,
+        pointerEvents: isMaintenanceActive ? 'none' : 'auto',
+        filter: isMaintenanceActive ? 'blur(3px)' : 'none',
         transition: 'all 0.3s ease',
         position: 'relative'
       }}>
@@ -401,26 +348,26 @@ function Sales({ currentUser }) {
               placeholder={activeTab === "bar" ? "Search bar products..." : "Search food items..."}
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); }}
-              style={{...searchInputStyle, opacity: maintenanceMode ? 0.5 : 1}}
-              disabled={maintenanceMode}
+              style={{...searchInputStyle, opacity: isMaintenanceActive ? 0.5 : 1}}
+              disabled={isMaintenanceActive}
             />
           </div>
 
           <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
             {[
               { key: "bar", label: "🍺 Bar Products" },
-              { key: "food", label: "🍽️ Food Menu" },
+              { key: "food", label: "️ Food Menu" },
             ].map((tab) => (
               <button key={tab.key} onClick={() => { setActiveTab(tab.key); setSearchTerm(""); }}
-                disabled={maintenanceMode}
+                disabled={isMaintenanceActive}
                 style={{
                   padding: "8px 16px", borderRadius: "7px", fontWeight: "600", fontSize: "13px",
                   background: activeTab === tab.key ? "#1f2a36" : "#eef1f5",
                   color: activeTab === tab.key ? "#f4c85a" : "#4a4a4a",
                   border: activeTab === tab.key ? "1px solid #1f2a36" : "1px solid #cbd5e1",
                   transition: "all 0.15s",
-                  cursor: maintenanceMode ? "not-allowed" : "pointer",
-                  opacity: maintenanceMode ? 0.5 : 1
+                  cursor: isMaintenanceActive ? "not-allowed" : "pointer",
+                  opacity: isMaintenanceActive ? 0.5 : 1
                 }}>
                 {tab.label}
               </button>
@@ -428,19 +375,17 @@ function Sales({ currentUser }) {
           </div>
 
           <div style={productListStyle}>
-            {isLoading && <div style={emptyPanelStyle}>Loading products...</div>}
-            
-            {productsLoadError && !isLoading && (
+            {productsLoadError && (
               <div style={{...emptyPanelStyle, background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b"}}>
-                <strong>⚠️ {productsLoadError}</strong>
+                <strong>️ {productsLoadError}</strong>
                 <p style={{marginTop: "8px", fontSize: "13px"}}>Please refresh the page or contact support.</p>
               </div>
             )}
 
-            {!isLoading && !productsLoadError && activeTab === "bar" && (
+            {!productsLoadError && activeTab === "bar" && (
               <>
                 {filteredProducts.map((product) => (
-                  <div key={product.id} style={{...productRowStyle, opacity: maintenanceMode ? 0.5 : 1}}>
+                  <div key={product.id} style={{...productRowStyle, opacity: isMaintenanceActive ? 0.5 : 1}}>
                     <div>
                       <strong>{product.name}</strong>
                       <p style={productMetaStyle}>
@@ -451,8 +396,8 @@ function Sales({ currentUser }) {
                       <strong>{formatMoney(product.selling_price ?? product.price)}</strong>
                       <button 
                         onClick={() => addProductToCart(product)} 
-                        style={{...addButtonStyle, opacity: maintenanceMode ? 0.3 : 1, cursor: maintenanceMode ? 'not-allowed' : 'pointer'}}
-                        disabled={maintenanceMode}
+                        style={{...addButtonStyle, opacity: isMaintenanceActive ? 0.3 : 1, cursor: isMaintenanceActive ? 'not-allowed' : 'pointer'}}
+                        disabled={isMaintenanceActive}
                       >
                         Add
                       </button>
@@ -465,10 +410,10 @@ function Sales({ currentUser }) {
               </>
             )}
 
-            {!isLoading && !productsLoadError && activeTab === "food" && (
+            {!productsLoadError && activeTab === "food" && (
               <>
                 {filteredMenu.map((item) => (
-                  <div key={item.id} style={{...productRowStyle, opacity: maintenanceMode ? 0.5 : 1}}>
+                  <div key={item.id} style={{...productRowStyle, opacity: isMaintenanceActive ? 0.5 : 1}}>
                     <div>
                       <strong>{item.name}</strong>
                       <p style={productMetaStyle}>Food</p>
@@ -477,8 +422,8 @@ function Sales({ currentUser }) {
                       <strong>{formatMoney(item.price)}</strong>
                       <button 
                         onClick={() => addMenuToCart(item)} 
-                        style={{ ...addButtonStyle, background: "#c9a84c", color: "#1a1a2e", opacity: maintenanceMode ? 0.3 : 1, cursor: maintenanceMode ? 'not-allowed' : 'pointer'}}
-                        disabled={maintenanceMode}
+                        style={{ ...addButtonStyle, background: "#c9a84c", color: "#1a1a2e", opacity: isMaintenanceActive ? 0.3 : 1, cursor: isMaintenanceActive ? 'not-allowed' : 'pointer'}}
+                        disabled={isMaintenanceActive}
                       >
                         Add
                       </button>
@@ -504,7 +449,7 @@ function Sales({ currentUser }) {
           {cartItems.length > 0 && (
             <div style={cartListStyle}>
               {cartItems.map((item) => (
-                <div key={item.id} style={{...cartItemStyle, opacity: maintenanceMode ? 0.5 : 1}}>
+                <div key={item.id} style={{...cartItemStyle, opacity: isMaintenanceActive ? 0.5 : 1}}>
                   <div>
                     <strong>{item.name}</strong>
                     <p style={productMetaStyle}>
@@ -515,28 +460,10 @@ function Sales({ currentUser }) {
                     </p>
                   </div>
                   <div style={quantityControlsStyle}>
-                    <button 
-                      onClick={() => decreaseQuantity(item.id)} 
-                      style={{...quantityButtonStyle, opacity: maintenanceMode ? 0.3 : 1, cursor: maintenanceMode ? 'not-allowed' : 'pointer'}}
-                      disabled={maintenanceMode}
-                    >
-                      <FaMinus />
-                    </button>
+                    <button onClick={() => decreaseQuantity(item.id)} style={{...quantityButtonStyle, opacity: isMaintenanceActive ? 0.3 : 1, cursor: isMaintenanceActive ? 'not-allowed' : 'pointer'}} disabled={isMaintenanceActive}><FaMinus /></button>
                     <span style={quantityValueStyle}>{item.quantity}</span>
-                    <button 
-                      onClick={() => increaseQuantity(item.id)} 
-                      style={{...quantityButtonStyle, opacity: maintenanceMode ? 0.3 : 1, cursor: maintenanceMode ? 'not-allowed' : 'pointer'}}
-                      disabled={maintenanceMode}
-                    >
-                      <FaPlus />
-                    </button>
-                    <button 
-                      onClick={() => removeFromCart(item.id)} 
-                      style={{...removeButtonStyle, opacity: maintenanceMode ? 0.3 : 1, cursor: maintenanceMode ? 'not-allowed' : 'pointer'}}
-                      disabled={maintenanceMode}
-                    >
-                      <FaTrash />
-                    </button>
+                    <button onClick={() => increaseQuantity(item.id)} style={{...quantityButtonStyle, opacity: isMaintenanceActive ? 0.3 : 1, cursor: isMaintenanceActive ? 'not-allowed' : 'pointer'}} disabled={isMaintenanceActive}><FaPlus /></button>
+                    <button onClick={() => removeFromCart(item.id)} style={{...removeButtonStyle, opacity: isMaintenanceActive ? 0.3 : 1, cursor: isMaintenanceActive ? 'not-allowed' : 'pointer'}} disabled={isMaintenanceActive}><FaTrash /></button>
                   </div>
                 </div>
               ))}
@@ -549,43 +476,26 @@ function Sales({ currentUser }) {
           </div>
 
           <div style={paymentGroupStyle}>
-            <button 
-              onClick={() => setPaymentMethod("cash")} 
-              style={paymentMethod === "cash" ? activePaymentButtonStyle : paymentButtonStyle}
-              disabled={maintenanceMode}
-            >
-              Cash
-            </button>
-            <button 
-              onClick={() => setPaymentMethod("mpesa")} 
-              style={paymentMethod === "mpesa" ? activePaymentButtonStyle : paymentButtonStyle}
-              disabled={maintenanceMode}
-            >
-              M-Pesa
-            </button>
+            <button onClick={() => setPaymentMethod("cash")} style={paymentMethod === "cash" ? activePaymentButtonStyle : paymentButtonStyle} disabled={isMaintenanceActive}>Cash</button>
+            <button onClick={() => setPaymentMethod("mpesa")} style={paymentMethod === "mpesa" ? activePaymentButtonStyle : paymentButtonStyle} disabled={isMaintenanceActive}>M-Pesa</button>
           </div>
 
           <button
             onClick={completeSale}
-            disabled={cartItems.length === 0 || isSubmitting || maintenanceMode}
+            disabled={cartItems.length === 0 || isSubmitting || isMaintenanceActive}
             style={{ 
               ...checkoutButtonStyle, 
-              opacity: cartItems.length === 0 || isSubmitting || maintenanceMode ? 0.6 : 1,
-              cursor: maintenanceMode ? "not-allowed" : "pointer",
-              background: maintenanceMode ? "#6b7280" : "#1f2a36"
+              opacity: cartItems.length === 0 || isSubmitting || isMaintenanceActive ? 0.6 : 1,
+              cursor: isMaintenanceActive ? "not-allowed" : "pointer",
+              background: isMaintenanceActive ? "#6b7280" : "#1f2a36"
             }}
           >
-            {maintenanceMode ? "🔒 System Locked" : isSubmitting ? "Completing..." : "Complete Sale"}
+            {isMaintenanceActive ? " System Locked" : isSubmitting ? "Completing..." : "Complete Sale"}
           </button>
         </aside>
       </div>
 
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.9; }
-        }
-      `}</style>
+      <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.9; } }`}</style>
     </div>
   );
 }
