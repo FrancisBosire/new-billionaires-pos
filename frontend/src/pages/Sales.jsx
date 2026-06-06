@@ -36,14 +36,21 @@ function Sales({ currentUser }) {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [maintenanceMode, setMaintenanceMode] = useState(false);
+  const [productsLoadError, setProductsLoadError] = useState("");
 
   const refreshProducts = async () => {
-    const response = await fetch(PRODUCTS_API_URL, { headers: getAuthHeaders() });
-    if (!response.ok) throw new Error("Failed to refresh products");
-    const data = await response.json();
-    setProducts(data);
+    try {
+      const response = await fetch(PRODUCTS_API_URL, { headers: getAuthHeaders() });
+      if (!response.ok) throw new Error("Failed to refresh products");
+      const data = await response.json();
+      setProducts(data);
+      setProductsLoadError("");
+    } catch (err) {
+      setProductsLoadError(err.message);
+    }
   };
 
+  // Check maintenance mode IMMEDIATELY on load
   useEffect(() => {
     const checkMaintenanceMode = async () => {
       try {
@@ -60,12 +67,16 @@ function Sales({ currentUser }) {
     };
 
     checkMaintenanceMode();
+    
+    // Poll every 10 seconds
     const interval = setInterval(checkMaintenanceMode, 10000);
     return () => clearInterval(interval);
   }, []);
 
+  // Load products and menu
   useEffect(() => {
     let isActive = true;
+    setProductsLoadError("");
 
     Promise.all([
       fetchJson(PRODUCTS_API_URL, "Failed to load products"),
@@ -79,15 +90,14 @@ function Sales({ currentUser }) {
       })
       .catch((error) => { 
         if (isActive) {
-          if (!error.message.includes("forbidden") && !error.message.includes("permission")) {
-            setErrorMessage(error.message);
-          }
+          // Show the error to the user
+          setProductsLoadError(error.message);
         }
       })
       .finally(() => { if (isActive) setIsLoading(false); });
 
     return () => { isActive = false; };
-  }, [maintenanceMode]);
+  }, []); // Remove maintenanceMode dependency to avoid reloading
 
   useEffect(() => {
     if (!successMessage) return;
@@ -112,7 +122,10 @@ function Sales({ currentUser }) {
   const formatMoney = (amount) => `KES ${Number(amount).toFixed(2)}`;
 
   const addProductToCart = (product) => {
-    if (maintenanceMode) return;
+    if (maintenanceMode) {
+      setErrorMessage("System is under maintenance. Cannot add items to cart.");
+      return;
+    }
     
     const stock = Number(product.stock_quantity ?? product.stock);
     setErrorMessage(""); setSuccessMessage("");
@@ -143,7 +156,10 @@ function Sales({ currentUser }) {
   };
 
   const addMenuToCart = (menuItem) => {
-    if (maintenanceMode) return;
+    if (maintenanceMode) {
+      setErrorMessage("System is under maintenance. Cannot add items to cart.");
+      return;
+    }
     
     setErrorMessage(""); setSuccessMessage("");
 
@@ -261,6 +277,7 @@ function Sales({ currentUser }) {
         </div>
       </div>
 
+      {/* MAINTENANCE MODE ALERT - SHOWS IMMEDIATELY */}
       {maintenanceMode && (
         <div style={maintenanceAlertStyle}>
           <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "12px" }}>
@@ -286,7 +303,7 @@ function Sales({ currentUser }) {
                 textTransform: "uppercase",
                 letterSpacing: "0.5px"
               }}>
-                🔒 System Under Maintenance
+                🔒 SYSTEM UNDER MAINTENANCE
               </h2>
               <p style={{ 
                 margin: "6px 0 0", 
@@ -322,7 +339,16 @@ function Sales({ currentUser }) {
       {errorMessage && <div style={errorStyle}>{errorMessage}</div>}
       {successMessage && <div style={successStyle}>{successMessage}</div>}
 
-      <div style={{...layoutStyle, opacity: maintenanceMode ? 0.4 : 1, pointerEvents: maintenanceMode ? 'none' : 'auto', filter: maintenanceMode ? 'blur(2px)' : 'none', transition: 'all 0.3s ease'}}>
+      {/* WRAPPER WITH BLUR - Applied immediately when maintenance is on */}
+      <div style={{
+        ...layoutStyle,
+        opacity: maintenanceMode ? 0.3 : 1,
+        pointerEvents: maintenanceMode ? 'none' : 'auto',
+        filter: maintenanceMode ? 'blur(3px)' : 'none',
+        transition: 'all 0.3s ease',
+        position: 'relative'
+      }}>
+        {/* PRODUCTS PANEL */}
         <section style={productsPanelStyle}>
           <div style={panelHeaderStyle}>
             <input
@@ -330,7 +356,7 @@ function Sales({ currentUser }) {
               placeholder={activeTab === "bar" ? "Search bar products..." : "Search food items..."}
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); }}
-              style={searchInputStyle}
+              style={{...searchInputStyle, opacity: maintenanceMode ? 0.5 : 1}}
               disabled={maintenanceMode}
             />
           </div>
@@ -357,9 +383,16 @@ function Sales({ currentUser }) {
           </div>
 
           <div style={productListStyle}>
-            {isLoading && <div style={emptyPanelStyle}>Loading...</div>}
+            {isLoading && <div style={emptyPanelStyle}>Loading products...</div>}
+            
+            {productsLoadError && !isLoading && (
+              <div style={{...emptyPanelStyle, background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b"}}>
+                <strong>⚠️ {productsLoadError}</strong>
+                <p style={{marginTop: "8px", fontSize: "13px"}}>Please refresh the page or contact support.</p>
+              </div>
+            )}
 
-            {!isLoading && activeTab === "bar" && (
+            {!isLoading && !productsLoadError && activeTab === "bar" && (
               <>
                 {filteredProducts.map((product) => (
                   <div key={product.id} style={{...productRowStyle, opacity: maintenanceMode ? 0.5 : 1}}>
@@ -381,11 +414,13 @@ function Sales({ currentUser }) {
                     </div>
                   </div>
                 ))}
-                {filteredProducts.length === 0 && <div style={emptyPanelStyle}>No bar products found.</div>}
+                {filteredProducts.length === 0 && !productsLoadError && (
+                  <div style={emptyPanelStyle}>No bar products found.</div>
+                )}
               </>
             )}
 
-            {!isLoading && activeTab === "food" && (
+            {!isLoading && !productsLoadError && activeTab === "food" && (
               <>
                 {filteredMenu.map((item) => (
                   <div key={item.id} style={{...productRowStyle, opacity: maintenanceMode ? 0.5 : 1}}>
@@ -405,7 +440,7 @@ function Sales({ currentUser }) {
                     </div>
                   </div>
                 ))}
-                {filteredMenu.length === 0 && (
+                {filteredMenu.length === 0 && !productsLoadError && (
                   <div style={emptyPanelStyle}>
                     {menuItems.length === 0 ? "No food items on the menu yet. Add some from the Food Menu page." : "No food items match your search."}
                   </div>
@@ -415,6 +450,7 @@ function Sales({ currentUser }) {
           </div>
         </section>
 
+        {/* CART PANEL */}
         <aside style={cartPanelStyle}>
           <h3>Current Cart</h3>
 
