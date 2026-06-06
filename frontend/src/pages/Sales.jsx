@@ -37,6 +37,7 @@ function Sales({ currentUser }) {
   const [successMessage, setSuccessMessage] = useState("");
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [productsLoadError, setProductsLoadError] = useState("");
+  const [isCheckingMaintenance, setIsCheckingMaintenance] = useState(true);
 
   const refreshProducts = async () => {
     try {
@@ -50,19 +51,31 @@ function Sales({ currentUser }) {
     }
   };
 
-  // Check maintenance mode IMMEDIATELY on load
+  // Check maintenance mode FIRST before anything else
   useEffect(() => {
     const checkMaintenanceMode = async () => {
       try {
+        console.log("🔍 Checking maintenance mode...");
+        setIsCheckingMaintenance(true);
+        
         const response = await fetch(`${OWNER_API_URL}/maintenance`, { 
           headers: getAuthHeaders() 
         });
+        
         if (response.ok) {
           const data = await response.json();
-          setMaintenanceMode(data.isActive || false);
+          const isActive = data.isActive === true;
+          console.log("🔒 Maintenance mode:", isActive ? "ON ✅" : "OFF ❌");
+          setMaintenanceMode(isActive);
+        } else {
+          console.error("Maintenance API failed:", response.status);
+          setMaintenanceMode(false);
         }
       } catch (err) {
-        console.error("Failed to check maintenance mode:", err);
+        console.error("Error checking maintenance:", err);
+        setMaintenanceMode(false);
+      } finally {
+        setIsCheckingMaintenance(false);
       }
     };
 
@@ -73,8 +86,10 @@ function Sales({ currentUser }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Load products and menu
+  // Load products and menu AFTER maintenance check
   useEffect(() => {
+    if (isCheckingMaintenance) return; // Wait for maintenance check
+    
     let isActive = true;
     setProductsLoadError("");
 
@@ -90,14 +105,14 @@ function Sales({ currentUser }) {
       })
       .catch((error) => { 
         if (isActive) {
-          // Show the error to the user
+          console.error("Failed to load products/menu:", error);
           setProductsLoadError(error.message);
         }
       })
       .finally(() => { if (isActive) setIsLoading(false); });
 
     return () => { isActive = false; };
-  }, []); // Remove maintenanceMode dependency to avoid reloading
+  }, [isCheckingMaintenance]); // Only run after maintenance check
 
   useEffect(() => {
     if (!successMessage) return;
@@ -266,6 +281,36 @@ function Sales({ currentUser }) {
     }
   };
 
+  // Show loading screen while checking maintenance
+  if (isCheckingMaintenance) {
+    return (
+      <div style={{
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        height: "100vh",
+        background: "#f5f5f5"
+      }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{
+            fontSize: "48px",
+            marginBottom: "16px",
+            animation: "spin 1s linear infinite"
+          }}>
+            ⏳
+          </div>
+          <p style={{ fontSize: "16px", color: "#666" }}>Checking system status...</p>
+        </div>
+        <style>{`
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
+      </div>
+    );
+  }
+
   return (
     <div className="page-shell sales-page">
       <div style={pageHeaderStyle}>
@@ -339,7 +384,7 @@ function Sales({ currentUser }) {
       {errorMessage && <div style={errorStyle}>{errorMessage}</div>}
       {successMessage && <div style={successStyle}>{successMessage}</div>}
 
-      {/* WRAPPER WITH BLUR - Applied immediately when maintenance is on */}
+      {/* WRAPPER WITH BLUR */}
       <div style={{
         ...layoutStyle,
         opacity: maintenanceMode ? 0.3 : 1,
