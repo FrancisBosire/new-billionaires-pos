@@ -37,7 +37,7 @@ app.use("/api/reports", verifyToken, authorizeRoles("owner", "sudo_admin", "admi
 app.use("/api/stock", verifyToken, authorizeRoles("owner", "sudo_admin", "admin"), stockRoutes);
 app.use("/api/ingredient-stock", verifyToken, authorizeRoles("owner", "sudo_admin", "admin"), ingredientStockRoutes); // Protect ingredient stock routes
 app.use("/api/users", verifyToken, authorizeRoles("owner", "sudo_admin", "admin"), userRoutes);
-app.use("/api/menu", verifyToken, authorizeRoles("owner", "sudo_admin", "admin"), menuRoutes);
+app.use("/api/menu", verifyToken, authorizeRoles("owner", "sudo_admin", "admin", "cashier"), menuRoutes);
 app.use("/api/owner", verifyToken, authorizeRoles("owner"), ownerRoutes); // Owner-only routes (backup, system info, etc.)
   
 // Initialize Global Maintenance Mode State
