@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { FaTrash, FaEdit, FaTimes } from "react-icons/fa";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
@@ -39,6 +39,26 @@ function Products() {
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+
+  // Ref for scrolling
+  const pageShellRef = useRef(null);
+
+  // Scroll to top when page changes
+  useEffect(() => {
+    // Try to scroll the page-shell container first
+    if (pageShellRef.current) {
+      pageShellRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+      // Fallback: try to find .page-shell class
+      const scrollContainer = document.querySelector('.page-shell');
+      if (scrollContainer) {
+        scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
+      } else {
+        // Last resort: scroll window
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+  }, [currentPage]);
 
   const fetchProducts = async () => {
     try {
@@ -174,7 +194,7 @@ function Products() {
   const currentProducts = filteredProducts.slice(indexOfFirstItem, indexOfLastItem);
 
   return (
-    <div className="page-shell products-page" style={pageStyle}>
+    <div className="page-shell products-page" style={pageStyle} ref={pageShellRef}>
       <div className="page-header-row" style={pageHeaderStyle}>
         <div>
           <h1 style={titleStyle}>Products</h1>
