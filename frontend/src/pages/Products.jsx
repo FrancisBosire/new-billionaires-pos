@@ -43,20 +43,11 @@ function Products() {
   // Ref for scrolling
   const pageShellRef = useRef(null);
 
-  // Scroll to top when page changes
+    // Scroll to top when page changes
   useEffect(() => {
-    // Try to scroll the page-shell container first
-    if (pageShellRef.current) {
-      pageShellRef.current.scrollTo({ top: 0, behavior: 'smooth' });
-    } else {
-      // Fallback: try to find .page-shell class
-      const scrollContainer = document.querySelector('.page-shell');
-      if (scrollContainer) {
-        scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
-      } else {
-        // Last resort: scroll window
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
+    const scrollContainer = document.querySelector('.app-content');
+    if (scrollContainer) {
+      scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }, [currentPage]);
 

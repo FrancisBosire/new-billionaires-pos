@@ -41,6 +41,14 @@ export default function Menu() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  // - Scroll to top when pagination changes
+  useEffect(() => {
+    const scrollContainer = document.querySelector('.app-content');
+    if (scrollContainer) {
+      scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [currentPage]);
+
   const fetchItems = async () => {
     try {
       const res = await fetch(MENU_URL, { headers: getAuthHeaders() });

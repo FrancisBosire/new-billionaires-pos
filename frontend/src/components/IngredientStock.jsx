@@ -218,6 +218,14 @@ export default function IngredientStock() {
   const [ingredientsPage, setIngredientsPage] = useState(1);
   const [historyPage, setHistoryPage] = useState(1);
 
+   // - Scroll to top when pagination changes
+  useEffect(() => {
+    const scrollContainer = document.querySelector('.app-content');
+    if (scrollContainer) {
+      scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [ingredientsPage, historyPage]);
+
   // ── FORM VISIBILITY ──
   const [showStockInForm, setShowStockInForm] = useState(false);
   const [showNewForm, setShowNewForm] = useState(false);

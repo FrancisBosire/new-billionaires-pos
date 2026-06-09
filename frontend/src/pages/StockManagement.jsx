@@ -247,6 +247,14 @@ export default function StockManagement() {
   // Pagination states
   const [productsPage, setProductsPage] = useState(1);
   const [historyPage, setHistoryPage] = useState(1);
+
+  // - Scroll to top when pagination changes
+  useEffect(() => {
+    const scrollContainer = document.querySelector('.app-content');
+    if (scrollContainer) {
+      scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [productsPage, historyPage]);
   
   const [editingProduct, setEditingProduct] = useState(null);
   const [productId, setProductId] = useState(null);
