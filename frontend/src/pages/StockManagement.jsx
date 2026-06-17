@@ -255,6 +255,16 @@ export default function StockManagement() {
       scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }, [productsPage, historyPage]);
+
+  // ✅ NEW: Scroll to top when success or error message appears
+  useEffect(() => {
+    if (successMessage || errorMessage) {
+      const scrollContainer = document.querySelector('.app-content');
+      if (scrollContainer) {
+        scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+  }, [successMessage, errorMessage]);
   
   const [editingProduct, setEditingProduct] = useState(null);
   const [productId, setProductId] = useState(null);

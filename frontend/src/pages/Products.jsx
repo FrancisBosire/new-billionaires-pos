@@ -43,6 +43,7 @@ function Products() {
   // Ref for scrolling
   const pageShellRef = useRef(null);
 
+
     // Scroll to top when page changes
   useEffect(() => {
     const scrollContainer = document.querySelector('.app-content');
@@ -50,6 +51,16 @@ function Products() {
       scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }, [currentPage]);
+
+  // Scroll to top when error message appears
+  useEffect(() => {
+    if (errorMessage) {
+      const scrollContainer = document.querySelector('.app-content');
+      if (scrollContainer) {
+        scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }
+  }, [errorMessage]);
 
   const fetchProducts = async () => {
     try {
