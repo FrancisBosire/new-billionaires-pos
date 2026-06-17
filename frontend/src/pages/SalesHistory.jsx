@@ -100,7 +100,6 @@ export default function SalesHistory({ currentUser, isMySales = false }) {
     }
   };
 
-  // Fixed DRY configuration - uses auth headers via internal wrapper safely
   useEffect(() => {
     const range = getQuickRange(quickFilter);
     const timer = setTimeout(() => loadSales(range), 0);
@@ -125,14 +124,19 @@ export default function SalesHistory({ currentUser, isMySales = false }) {
   const avgCheck = sales.length ? totalSales / sales.length : 0;
   const paymentMethods = ["All", ...new Set(sales.map((sale) => sale.paymentMethod).filter(Boolean))];
 
+  // ✅ UPDATED: Also search by waiter name
   const filteredSales = sales.filter((sale) => {
     const searchValue = search.toLowerCase();
     const matchesSearch =
       String(sale.id).includes(searchValue) ||
-      (sale.cashierName || "").toLowerCase().includes(searchValue);
+      (sale.cashierName || "").toLowerCase().includes(searchValue) ||
+      (sale.waiterName || "").toLowerCase().includes(searchValue); // ✅ NEW
     const matchesPayment = filterPayment === "All" || sale.paymentMethod === filterPayment;
     return matchesSearch && matchesPayment;
   });
+
+  // ✅ UPDATED: Column count increased by 1 for the Waiter column
+  const totalColumns = isMySales ? 6 : 7;
 
   return (
     <div className="page-shell sales-history-page" style={{ maxWidth: "100%", overflowX: "hidden" }}>
@@ -154,7 +158,7 @@ export default function SalesHistory({ currentUser, isMySales = false }) {
       <div style={filterPanelStyle}>
         <input
           type="text"
-          placeholder={isMySales ? "Search by sale ID..." : "Search by sale ID or cashier..."}
+          placeholder={isMySales ? "Search by sale ID or waiter..." : "Search by sale ID, cashier, or waiter..."}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           style={inputStyle}
@@ -204,25 +208,26 @@ export default function SalesHistory({ currentUser, isMySales = false }) {
             </div>
           </div>
 
-          {/* Scrollable table window with constrained layout width */}
+          {/* Scrollable table window */}
           <div ref={tableScrollRef} style={{ overflowX: "auto", width: "100%", scrollBehavior: "smooth" }}>
-            <table style={{ ...tableStyle, minWidth: "640px" }}>
+            <table style={{ ...tableStyle, minWidth: "780px" }}>
               <thead>
                 <tr>
                   <th style={thStyle}>Sale</th>
                   {!isMySales && <th style={thStyle}>Cashier</th>}
+                  <th style={thStyle}>Waiter</th>
                   <th style={thStyle}>Payment</th>
                   <th style={thStyle}>Total</th>
                   <th style={thStyle}>Date</th>
-                  <th style={thStyle} dangerouslySetComment={{__html: "&nbsp;"}}>Action</th>
+                  <th style={thStyle}>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {loading && (
-                  <tr><td colSpan={isMySales ? 5 : 6} style={emptyCellStyle}>Loading sales...</td></tr>
+                  <tr><td colSpan={totalColumns} style={emptyCellStyle}>Loading sales...</td></tr>
                 )}
                 {!loading && filteredSales.length === 0 && (
-                  <tr><td colSpan={isMySales ? 5 : 6} style={emptyCellStyle}>No sales found</td></tr>
+                  <tr><td colSpan={totalColumns} style={emptyCellStyle}>No sales found</td></tr>
                 )}
                 {!loading && filteredSales.map((sale) => (
                   <tr key={sale.id}
@@ -232,6 +237,16 @@ export default function SalesHistory({ currentUser, isMySales = false }) {
                   >
                     <td style={{ ...tdStyle, fontWeight: "700", color: "#c9a84c" }}>#{sale.id}</td>
                     {!isMySales && <td style={tdStyle}>{sale.cashierName || "N/A"}</td>}
+                    {/* ✅ NEW: Waiter Column */}
+                    <td style={tdStyle}>
+                      {sale.waiterName ? (
+                        <span style={waiterBadgeStyle}>
+                          {sale.waiterName}
+                        </span>
+                      ) : (
+                        <span style={{ color: "#9ca3af", fontSize: "12px", fontStyle: "italic" }}>—</span>
+                      )}
+                    </td>
                     <td style={tdStyle}>{paymentBadge(sale.paymentMethod)}</td>
                     <td style={{ ...tdStyle, fontWeight: "700" }}>{formatMoney(sale.totalAmount)}</td>
                     <td style={{ ...tdStyle, color: "#6b7280" }}>{formatDate(sale.createdAt)}</td>
@@ -267,6 +282,7 @@ function SummaryCard({ label, value }) {
   );
 }
 
+// ✅ UPDATED: ReceiptPanel now shows Waiter name
 function ReceiptPanel({ sale, items, isMySales }) {
   if (!sale) {
     return (
@@ -290,6 +306,7 @@ function ReceiptPanel({ sale, items, isMySales }) {
         {[
           { label: "Receipt", value: `#${sale.id}` },
           ...(!isMySales ? [{ label: "Cashier", value: sale.cashierName || "N/A" }] : []),
+          { label: "Waiter", value: sale.waiterName || "—" },
           { label: "Date", value: formatDate(sale.createdAt) },
           { label: "Payment", value: sale.paymentMethod },
         ].map((row) => (
@@ -381,6 +398,19 @@ const emptyCellStyle = { ...tdStyle, textAlign: "center", color: "#888", padding
 const viewIconButtonStyle = { border: "none", borderRadius: "7px", cursor: "pointer", fontWeight: "700", width: "38px", height: "36px", display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" };
 const cashBadgeStyle = { background: "#e8f5e9", color: "#2e7d32", border: "1px solid #c8e6c9", padding: "3px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600", textTransform: "capitalize" };
 const mpesaBadgeStyle = { ...cashBadgeStyle, background: "#e3f2fd", color: "#1565c0", border: "1px solid #bbdefb" };
+
+// ✅ NEW: Waiter badge style
+const waiterBadgeStyle = { 
+  background: "#fef3c7", 
+  color: "#92400e", 
+  border: "1px solid #fde68a", 
+  padding: "3px 10px", 
+  borderRadius: "20px", 
+  fontSize: "12px", 
+  fontWeight: "600",
+  display: "inline-block"
+};
+
 const receiptCardStyle = { background: "#ffffff", border: "1px solid #e0ddd5", borderRadius: "8px", padding: "20px", minWidth: "320px", position: "sticky", top: "0" };
 const receiptEmptyStyle = { color: "#6b7280", textAlign: "center", padding: "80px 20px", border: "1px dashed #d0cdc6", borderRadius: "8px" };
 const receiptHeaderStyle = { textAlign: "center", paddingBottom: "16px", borderBottom: "1px dashed #d0cdc6" };
