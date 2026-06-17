@@ -17,7 +17,7 @@ New Billionaires POS helps the business:
 - Show low-stock items.
 - Manage users.
 
----
+---.
 
 ## User Roles
 
