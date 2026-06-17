@@ -19,6 +19,7 @@ router.get("/", async (req, res) => {
         sales.total_amount AS totalAmount,
         sales.payment_method AS paymentMethod,
         sales.created_at AS createdAt,
+        sales.waiter_name AS waiterName,
         users.name AS cashierName
       FROM sales
       LEFT JOIN users ON sales.user_id = users.id
@@ -56,6 +57,7 @@ router.get("/", async (req, res) => {
     return res.status(500).json({ message: "Failed to fetch sales" });
   }
 });
+
 /* =========================
    GET SINGLE SALE
 ========================= */
@@ -98,16 +100,25 @@ router.get("/:id", async (req, res) => {
 ========================= */
 
 router.post("/", async (req, res) => {
- // 🔒 MAINTENANCE MODE CHECK
-if (global.isMaintenanceMode && req.user.role !== 'owner') {
-  return res.status(503).json({ 
-    error: "SYSTEM UNDER MAINTENANCE",
-    message: "System is currently under maintenance. All sales are temporarily disabled. Please wait for the Owner to restore normal operations.",
-    retryAfter: 300 // 5 minutes
-  });
-}
+  // 🔒 MAINTENANCE MODE CHECK
+  if (global.isMaintenanceMode && req.user.role !== 'owner') {
+    return res.status(503).json({ 
+      error: "SYSTEM UNDER MAINTENANCE",
+      message: "System is currently under maintenance. All sales are temporarily disabled. Please wait for the Owner to restore normal operations.",
+      retryAfter: 300 // 5 minutes
+    });
+  }
 
-  const { items, paymentMethod, userId } = req.body;
+  // ✅ UPDATED: Include waiterName in destructuring
+  const { items, paymentMethod, userId, waiterName } = req.body;
+  
+  // ✅ NEW: Validate waiterName
+  if (!waiterName || typeof waiterName !== 'string' || waiterName.trim() === '') {
+    return res.status(400).json({ 
+      message: "Waiter/Waitress name is required" 
+    });
+  }
+
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ message: "Cart items are required" });
   }
@@ -187,10 +198,10 @@ if (global.isMaintenanceMode && req.user.role !== 'owner') {
       }
     }
 
-    // Insert sale
+    // ✅ UPDATED: Insert sale with waiter_name
     const [saleResult] = await connection.query(
-      "INSERT INTO sales (total_amount, payment_method, user_id) VALUES (?, ?, ?)",
-      [totalAmount, paymentMethod, userId || null]
+      "INSERT INTO sales (total_amount, payment_method, user_id, waiter_name) VALUES (?, ?, ?, ?)",
+      [totalAmount, paymentMethod, userId || null, waiterName.trim()]
     );
 
     const saleId = saleResult.insertId;
@@ -231,6 +242,7 @@ if (global.isMaintenanceMode && req.user.role !== 'owner') {
       saleId,
       totalAmount,
       paymentMethod,
+      waiterName: waiterName.trim(), // ✅ NEW: Return waiter name in response
     });
 
   } catch (error) {

@@ -36,6 +36,7 @@ function Sales({ currentUser }) {
   const [successMessage, setSuccessMessage] = useState("");
   const [maintenanceMode, setMaintenanceMode] = useState(false);
   const [productsLoadError, setProductsLoadError] = useState("");
+  const [waiterName, setWaiterName] = useState("");
 
   // 🔑 KEY FIX: Only lock the UI if maintenance is ON AND the user is NOT the Owner
   const isMaintenanceActive = maintenanceMode && currentUser.role !== 'owner';
@@ -237,6 +238,12 @@ function Sales({ currentUser }) {
       return;
     }
 
+    // ✅ NEW: Validate waiter name
+    if (!waiterName.trim()) {
+      setErrorMessage("Please enter the Waiter/Waitress name before completing the sale");
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       const response = await fetch(SALES_API_URL, {
@@ -245,6 +252,7 @@ function Sales({ currentUser }) {
         body: JSON.stringify({
           paymentMethod,
           userId: currentUser.id,
+          waiterName: waiterName.trim(), // ✅ NEW: Include waiter name
           items: cartItems.map((item) => ({
             productId: item.productId,
             quantity: item.quantity,
@@ -266,6 +274,7 @@ function Sales({ currentUser }) {
 
       setSuccessMessage(`Sale #${data.saleId} completed: ${formatMoney(data.totalAmount)} via ${paymentMethod}`);
       setCartItems([]);
+      setWaiterName(""); // ✅ NEW: Reset waiter name after successful sale
       await refreshProducts();
     } catch (error) {
       setErrorMessage(error.message);
@@ -285,7 +294,7 @@ function Sales({ currentUser }) {
         background: "#f5f5f5"
       }}>
         <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: "48px", marginBottom: "16px", animation: "spin 1s linear infinite" }}></div>
+          <div style={{ fontSize: "48px", marginBottom: "16px", animation: "spin 1s linear infinite" }}>⏳</div>
           <p style={{ fontSize: "16px", color: "#666" }}>Loading POS system...</p>
         </div>
         <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
@@ -356,7 +365,7 @@ function Sales({ currentUser }) {
           <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
             {[
               { key: "bar", label: "🍺 Bar Products" },
-              { key: "food", label: "️ Food Menu" },
+              { key: "food", label: "🍽️ Food Menu" },
             ].map((tab) => (
               <button key={tab.key} onClick={() => { setActiveTab(tab.key); setSearchTerm(""); }}
                 disabled={isMaintenanceActive}
@@ -377,7 +386,7 @@ function Sales({ currentUser }) {
           <div style={productListStyle}>
             {productsLoadError && (
               <div style={{...emptyPanelStyle, background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b"}}>
-                <strong>️ {productsLoadError}</strong>
+                <strong>⚠️ {productsLoadError}</strong>
                 <p style={{marginTop: "8px", fontSize: "13px"}}>Please refresh the page or contact support.</p>
               </div>
             )}
@@ -470,6 +479,25 @@ function Sales({ currentUser }) {
             </div>
           )}
 
+          {/* WAITER NAME INPUT */}
+          <div style={waiterInputContainerStyle}>
+            <label style={waiterLabelStyle}>
+              Waiter/Waitress Name <span style={{ color: "#dc2626" }}>*</span>
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. John, Mary, Peter..."
+              value={waiterName}
+              onChange={(e) => setWaiterName(e.target.value)}
+              disabled={isMaintenanceActive}
+              style={{
+                ...waiterInputStyle,
+                opacity: isMaintenanceActive ? 0.5 : 1,
+                cursor: isMaintenanceActive ? 'not-allowed' : 'text'
+              }}
+            />
+          </div>
+
           <div style={totalRowStyle}>
             <span>Total</span>
             <strong>{formatMoney(cartTotal)}</strong>
@@ -490,7 +518,7 @@ function Sales({ currentUser }) {
               background: isMaintenanceActive ? "#6b7280" : "#1f2a36"
             }}
           >
-            {isMaintenanceActive ? " System Locked" : isSubmitting ? "Completing..." : "Complete Sale"}
+            {isMaintenanceActive ? "🔒 System Locked" : isSubmitting ? "Completing..." : "Complete Sale"}
           </button>
         </aside>
       </div>
@@ -500,6 +528,7 @@ function Sales({ currentUser }) {
   );
 }
 
+// ================= STYLES =================
 const pageHeaderStyle = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "20px", marginBottom: "20px" };
 const titleStyle = { fontSize: "30px", marginBottom: "6px" };
 const subtitleStyle = { color: "#6b7280", fontSize: "15px", textTransform: "capitalize" };
@@ -536,6 +565,32 @@ const maintenanceAlertStyle = {
   marginBottom: "20px",
   boxShadow: "0 8px 24px rgba(220, 38, 38, 0.4)",
   animation: "pulse 2s infinite"
+};
+
+//  Waiter input styles
+const waiterInputContainerStyle = {
+  marginBottom: "14px",
+  padding: "12px",
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+  borderRadius: "6px"
+};
+const waiterLabelStyle = {
+  display: "block",
+  fontSize: "13px",
+  fontWeight: "600",
+  color: "#374151",
+  marginBottom: "6px"
+};
+const waiterInputStyle = {
+  width: "100%",
+  padding: "9px 12px",
+  border: "1px solid #cbd5e1",
+  borderRadius: "6px",
+  fontSize: "14px",
+  outline: "none",
+  boxSizing: "border-box",
+  transition: "border-color 0.2s"
 };
 
 export default Sales;
