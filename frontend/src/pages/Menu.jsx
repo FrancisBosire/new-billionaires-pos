@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { FaEdit, FaTrash, FaPlus, FaTimes } from "react-icons/fa";
+import LoadingScreen from "../components/LoadingScreen";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 const MENU_URL = `${API_BASE_URL}/menu`;
@@ -128,6 +129,10 @@ export default function Menu() {
   const filteredItems = items.filter((i) =>
     i.name.toLowerCase().includes(search.toLowerCase())
   );
+
+  if (loading) {
+  return <LoadingScreen />;
+}
 
   // Pagination logic
   const totalPages = Math.ceil(filteredItems.length / itemsPerPage);

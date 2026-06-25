@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import { FaPlus, FaBoxOpen, FaSearch, FaEdit, FaTrash, FaChevronLeft, FaChevronRight, FaExclamationTriangle, FaTimesCircle, FaTimes } from "react-icons/fa";
 import IngredientStock from "../components/IngredientStock";
+import LoadingScreen from "../components/LoadingScreen";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 const STOCK_URL = `${API_BASE_URL}/stock`;
@@ -445,6 +446,10 @@ export default function StockManagement() {
   const lowStockCount = products.filter((p) => p.stock_quantity > 0 && p.stock_quantity <= p.minimum_stock).length;
   const outOfStockCount = products.filter((p) => p.stock_quantity === 0).length;
   const totalStockValue = products.reduce((s, p) => s + Number(p.stock_quantity || 0) * Number(p.cost_price || 0), 0);
+
+  if (loading) {
+  return <LoadingScreen />;
+}
 
   return (
     <div className="page-shell stock-page" style={{ fontFamily: "'Segoe UI', sans-serif", color: "#1a1a2e" }}>

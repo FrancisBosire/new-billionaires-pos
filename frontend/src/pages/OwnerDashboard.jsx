@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { FaDatabase, FaServer, FaUsers, FaDownload, FaClock, FaPlus, FaShieldAlt, FaTools } from "react-icons/fa";
+import LoadingScreen from "../components/LoadingScreen";
 
 const API_URL = `${import.meta.env.VITE_API_URL}/owner`;
 
@@ -116,7 +117,7 @@ export default function OwnerDashboard() {
       .catch(err => setMessage({ type: "error", text: "Download failed." }));
   };
 
-  if (loading) return <div style={{ padding: 40, textAlign: "center", color: "#888" }}>Loading System Data...</div>;
+  if (loading) return <LoadingScreen />;
 
   return (
     <div style={{ fontFamily: "'Segoe UI', sans-serif", color: "#1a1a2e" }}>

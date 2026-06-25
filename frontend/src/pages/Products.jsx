@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { FaTrash, FaEdit, FaTimes } from "react-icons/fa";
+import LoadingScreen from "../components/LoadingScreen";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 const PRODUCTS_API_URL = `${API_BASE_URL}/products`;
@@ -213,6 +214,7 @@ function Products() {
     setSuccessMessage("");
   };
 
+ 
   const filteredProducts = products.filter((product) =>
     product.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -222,6 +224,11 @@ function Products() {
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   const currentProducts = filteredProducts.slice(indexOfFirstItem, indexOfLastItem);
+
+  // Show loading screen on initial load
+if (isLoading) {
+  return <LoadingScreen />;
+}
 
   return (
     <div className="page-shell products-page" style={pageStyle} ref={pageShellRef}>
@@ -338,7 +345,7 @@ function Products() {
           </tbody>
         </table>
 
-        {isLoading && <div style={emptyStateStyle}>Loading products...</div>}
+        
         {!isLoading && filteredProducts.length === 0 && (
           <div style={emptyStateStyle}>No products found. Try a different search term.</div>
         )}

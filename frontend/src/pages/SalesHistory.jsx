@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import { FaReceipt, FaChevronRight, FaChevronLeft } from "react-icons/fa";
+import LoadingScreen from "../components/LoadingScreen";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 const SALES_URL = `${API_BASE_URL}/sales`;
@@ -119,6 +120,10 @@ export default function SalesHistory({ currentUser, isMySales = false }) {
     }
     loadSales({ from: customFrom, to: customTo });
   };
+
+  if (loading) {
+  return <LoadingScreen />;
+}
 
   const totalSales = sales.reduce((sum, sale) => sum + Number(sale.totalAmount || 0), 0);
   const avgCheck = sales.length ? totalSales / sales.length : 0;

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { FaCashRegister, FaBox, FaChartBar, FaReceipt, FaHistory } from "react-icons/fa";
+import LoadingScreen from "../components/LoadingScreen";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
@@ -103,7 +104,7 @@ export default function Dashboard() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div style={{ padding: "60px", textAlign: "center", color: "#888" }}>Loading dashboard...</div>;
+  if (loading) return <LoadingScreen />;
 
   const overview = reports?.overview || {};
   const topProducts = reports?.topByQuantity?.slice(0, 5) || [];

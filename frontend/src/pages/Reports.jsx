@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import LoadingScreen from "../components/LoadingScreen";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 const REPORTS_URL = `${API_BASE_URL}/reports`;
@@ -134,6 +135,8 @@ const getItemTypeBreakdown = (data) => {
 
   return fallback;
 };
+
+if (loading) return <LoadingScreen />;
 
 const getTypeMetric = (data, type, key) => {
   const item = (data.itemTypeBreakdown || []).find(

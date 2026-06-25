@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { FaTrash, FaEdit, FaUserPlus } from "react-icons/fa";
+import LoadingScreen from "../components/LoadingScreen";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
@@ -185,6 +186,10 @@ const availableRoles =
     : currentUser.role === "sudo_admin"
       ? ["sudo_admin", "admin", "cashier"]
       : ["cashier"];
+
+      if (loading) {
+  return <LoadingScreen />;
+}
 
   return (
     <div className="page-shell users-page" style={pageStyle}>
