@@ -136,7 +136,7 @@ const getItemTypeBreakdown = (data) => {
   return fallback;
 };
 
-if (loading) return <LoadingScreen />;
+
 
 const getTypeMetric = (data, type, key) => {
   const item = (data.itemTypeBreakdown || []).find(
@@ -234,6 +234,8 @@ export default function Reports() {
       cursor: "pointer", fontWeight: "500", fontSize: "13px",
     }}>{label}</button>
   );
+
+  if (loading) return <LoadingScreen />;
 
   return (
     <div className="page-shell reports-page" style={{ fontFamily: "'Segoe UI', sans-serif", color: "#1a1a2e" }}>

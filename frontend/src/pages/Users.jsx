@@ -81,31 +81,9 @@ export default function Users({ currentUser }) {
     }
   };
 
-  useEffect(() => {
-    let isActive = true;
-
-    fetch(USERS_API_URL, { headers: getAuthHeaders() })
-      .then((res) => res.json())
-      .then((data) => {
-        if (isActive) {
-          setUsers(data);
-        }
-      })
-      .catch(() => {
-        if (isActive) {
-          setErrorMessage("Failed to load users.");
-        }
-      })
-      .finally(() => {
-        if (isActive) {
-          setIsLoading(false);
-        }
-      });
-
-    return () => {
-      isActive = false;
-    };
-  }, []);
+useEffect(() => {
+  fetchUsers();
+}, []);
 
   useEffect(() => {
     if (!successMessage) return;
@@ -187,7 +165,7 @@ const availableRoles =
       ? ["sudo_admin", "admin", "cashier"]
       : ["cashier"];
 
-      if (loading) {
+     if (isLoading) {
   return <LoadingScreen />;
 }
 

@@ -36,7 +36,7 @@ function Products() {
   const [products, setProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
-  const [successMessage, setSuccessMessage] = useState(""); // ✅ NEW: Track success messages
+  const [successMessage, setSuccessMessage] = useState("");
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -138,8 +138,8 @@ function Products() {
         throw new Error(data.error || data.message || "Failed to save product");
       }
       
-      // ✅ Set success message instead of clearing error
-      setSuccessMessage(`"${name}" has been added successfully!`);
+      // ✅ CLEANED: Removed quotes around name
+      setSuccessMessage(`${name} has been added successfully!`);
       await fetchProducts();
       resetForm();
       setShowForm(false);
@@ -155,7 +155,7 @@ function Products() {
     setPrice(product.price);
     setEditingId(product.id);
     setShowEditModal(true);
-    setErrorMessage(""); // Clear errors when opening edit modal
+    setErrorMessage("");
     setSuccessMessage("");
   };
 
@@ -180,31 +180,37 @@ function Products() {
     }
   };
 
-  const handleUpdateProduct = async () => {
-    // ✅ FIXED: Validate before sending
-    if (!name || !price) {
-      setErrorMessage("Product name and price are required.");
-      return;
-    }
+const handleUpdateProduct = async () => {
+  // ✅ FIXED: Validate before sending
+  if (!name || !price) {
+    setErrorMessage("Product name and price are required.");
+    return;
+  }
 
-    try {
-      const response = await fetch(`${PRODUCTS_API_URL}/${editingId}`, {
-        method: "PUT",
-        headers: getHeaders(),
-        body: JSON.stringify({ name, category, stock, price }),
-      });
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || data.message || "Failed to update product");
-      }
-      setSuccessMessage(`"${name}" has been updated successfully!`);
-      await fetchProducts();
-      resetForm();
-      setShowEditModal(false);
-    } catch (error) {
-      setErrorMessage(error.message);
+  try {
+    const response = await fetch(`${PRODUCTS_API_URL}/${editingId}`, {
+      method: "PUT",
+      headers: getHeaders(),
+      body: JSON.stringify({ name, category, stock, price }),
+    });
+    
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.error || data.message || "Failed to update product");
     }
-  };
+    
+    // ✅ Close modal IMMEDIATELY after success
+    setShowEditModal(false);
+    
+    // Then show success and refresh data
+    setSuccessMessage(`${name} has been updated successfully!`);
+    await fetchProducts();
+    resetForm();
+    
+  } catch (error) {
+    setErrorMessage(error.message);
+  }
+};
 
   const handleCancelForm = () => {
     resetForm();
@@ -214,7 +220,6 @@ function Products() {
     setSuccessMessage("");
   };
 
- 
   const filteredProducts = products.filter((product) =>
     product.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
@@ -226,9 +231,9 @@ function Products() {
   const currentProducts = filteredProducts.slice(indexOfFirstItem, indexOfLastItem);
 
   // Show loading screen on initial load
-if (isLoading) {
-  return <LoadingScreen />;
-}
+  if (isLoading) {
+    return <LoadingScreen />;
+  }
 
   return (
     <div className="page-shell products-page" style={pageStyle} ref={pageShellRef}>
@@ -345,7 +350,6 @@ if (isLoading) {
           </tbody>
         </table>
 
-        
         {!isLoading && filteredProducts.length === 0 && (
           <div style={emptyStateStyle}>No products found. Try a different search term.</div>
         )}
@@ -421,7 +425,6 @@ const titleStyle = { fontSize: "30px", marginBottom: "6px" };
 const subtitleStyle = { color: "#6b7280", fontSize: "15px" };
 const toolbarStyle = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "15px", marginBottom: "20px" };
 
-// ✅ Added success style
 const errorStyle = { background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", borderRadius: "6px", padding: "12px 14px", marginBottom: "20px" };
 const successStyle = { background: "#ecfdf5", border: "1px solid #bbf7d0", color: "#166534", borderRadius: "6px", padding: "12px 14px", marginBottom: "20px" };
 
