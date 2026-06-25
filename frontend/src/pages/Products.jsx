@@ -35,6 +35,7 @@ function Products() {
   const [products, setProducts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState(""); // ✅ NEW: Track success messages
 
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1);
@@ -43,8 +44,7 @@ function Products() {
   // Ref for scrolling
   const pageShellRef = useRef(null);
 
-
-    // Scroll to top when page changes
+  // Scroll to top when page changes
   useEffect(() => {
     const scrollContainer = document.querySelector('.app-content');
     if (scrollContainer) {
@@ -52,19 +52,26 @@ function Products() {
     }
   }, [currentPage]);
 
-  // Scroll to top when error message appears
+  // ✅ FIXED: Scroll to top when error OR success message appears
   useEffect(() => {
-    if (errorMessage) {
+    if (errorMessage || successMessage) {
       const scrollContainer = document.querySelector('.app-content');
       if (scrollContainer) {
         scrollContainer.scrollTo({ top: 0, behavior: 'smooth' });
       }
+      
+      // Auto-clear messages after 5 seconds
+      const timer = setTimeout(() => {
+        setErrorMessage("");
+        setSuccessMessage("");
+      }, 5000);
+      
+      return () => clearTimeout(timer);
     }
-  }, [errorMessage]);
+  }, [errorMessage, successMessage]);
 
   const fetchProducts = async () => {
     try {
-      setErrorMessage("");
       const response = await fetch(PRODUCTS_API_URL, { headers: getHeaders() });
       if (!response.ok) {
         const data = await response.json();
@@ -112,17 +119,26 @@ function Products() {
   };
 
   const handleAddProduct = async () => {
+    // ✅ FIXED: Don't clear error here. Only clear on success.
+    if (!name || !price) {
+      setErrorMessage("Product name and price are required.");
+      return;
+    }
+
     try {
-      setErrorMessage("");
       const response = await fetch(PRODUCTS_API_URL, {
         method: "POST",
         headers: getHeaders(),
         body: JSON.stringify({ name, category, stock, price }),
       });
+      
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || data.message || "Failed to save product");
       }
+      
+      // ✅ Set success message instead of clearing error
+      setSuccessMessage(`"${name}" has been added successfully!`);
       await fetchProducts();
       resetForm();
       setShowForm(false);
@@ -138,11 +154,14 @@ function Products() {
     setPrice(product.price);
     setEditingId(product.id);
     setShowEditModal(true);
+    setErrorMessage(""); // Clear errors when opening edit modal
+    setSuccessMessage("");
   };
 
   const handleDeleteProduct = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this product?")) return;
+    
     try {
-      setErrorMessage("");
       const response = await fetch(`${PRODUCTS_API_URL}/${id}`, {
         method: "DELETE",
         headers: getHeaders(),
@@ -151,6 +170,7 @@ function Products() {
         const data = await response.json();
         throw new Error(data.error || data.message || "Failed to delete product");
       }
+      setSuccessMessage("Product deleted successfully!");
       setProducts((currentProducts) =>
         currentProducts.filter((product) => product.id !== id)
       );
@@ -160,8 +180,13 @@ function Products() {
   };
 
   const handleUpdateProduct = async () => {
+    // ✅ FIXED: Validate before sending
+    if (!name || !price) {
+      setErrorMessage("Product name and price are required.");
+      return;
+    }
+
     try {
-      setErrorMessage("");
       const response = await fetch(`${PRODUCTS_API_URL}/${editingId}`, {
         method: "PUT",
         headers: getHeaders(),
@@ -171,6 +196,7 @@ function Products() {
         const data = await response.json();
         throw new Error(data.error || data.message || "Failed to update product");
       }
+      setSuccessMessage(`"${name}" has been updated successfully!`);
       await fetchProducts();
       resetForm();
       setShowEditModal(false);
@@ -183,6 +209,8 @@ function Products() {
     resetForm();
     setShowForm(false);
     setShowEditModal(false);
+    setErrorMessage("");
+    setSuccessMessage("");
   };
 
   const filteredProducts = products.filter((product) =>
@@ -206,7 +234,9 @@ function Products() {
         </div>
       </div>
 
+      {/* ✅ Display both error and success messages */}
       {errorMessage && <div style={errorStyle}>{errorMessage}</div>}
+      {successMessage && <div style={successStyle}>{successMessage}</div>}
 
       <div className="responsive-toolbar" style={toolbarStyle}>
         <button
@@ -216,6 +246,8 @@ function Products() {
               return;
             }
             setShowForm(true);
+            setErrorMessage("");
+            setSuccessMessage("");
           }}
           style={primaryButtonStyle}
         >
@@ -381,7 +413,11 @@ const pageHeaderStyle = { display: "flex", justifyContent: "space-between", gap:
 const titleStyle = { fontSize: "30px", marginBottom: "6px" };
 const subtitleStyle = { color: "#6b7280", fontSize: "15px" };
 const toolbarStyle = { display: "flex", justifyContent: "space-between", alignItems: "center", gap: "15px", marginBottom: "20px" };
+
+// ✅ Added success style
 const errorStyle = { background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", borderRadius: "6px", padding: "12px 14px", marginBottom: "20px" };
+const successStyle = { background: "#ecfdf5", border: "1px solid #bbf7d0", color: "#166534", borderRadius: "6px", padding: "12px 14px", marginBottom: "20px" };
+
 const primaryButtonStyle = { padding: "11px 16px", background: "#1f2a36", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "600" };
 const secondaryButtonStyle = { padding: "11px 16px", background: "#eef1f5", color: "#1f2a36", border: "1px solid #cbd5e1", borderRadius: "6px", cursor: "pointer", fontWeight: "600" };
 const searchInputStyle = { width: "280px", padding: "11px 12px", border: "1px solid #cbd5e1", borderRadius: "6px", outline: "none" };
